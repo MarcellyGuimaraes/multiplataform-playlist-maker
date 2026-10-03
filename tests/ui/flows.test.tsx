@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 // Fluxos de ponta a ponta da interface: páginas React reais, com o fetch do navegador roteado para os
 // handlers reais da API (mesmo roteamento por arquivos do servidor de desenvolvimento) sobre Postgres (PGlite).
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSql } from '../../api/_lib/db.js';
 import { discoverRoutes, matchRoute } from '../../scripts/vite-dev-api.js';
 import { App } from '../../src/App';
+import { PlayerAdapterProvider } from '../../src/player/PlayerAdapterContext';
+import { createFakeFactories } from '../../src/player/testing';
 import { fakeReq, fakeRes } from '../helpers.js';
 import { createTestDb } from '../pgdb.js';
 
@@ -16,6 +18,8 @@ const ROOT = join(import.meta.dirname, '..', '..');
 const routes = discoverRoutes(ROOT);
 let testDb: Awaited<ReturnType<typeof createTestDb>>;
 const apiCalls: string[] = [];
+// Os SDKs oficiais de player não rodam em jsdom: os fluxos usam adaptadores falsos que registram as cargas.
+let fake: ReturnType<typeof createFakeFactories>;
 
 async function fakeFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const url = new URL(String(input), 'http://localhost');
@@ -49,6 +53,8 @@ afterAll(() => testDb.db.close());
 beforeEach(async () => {
   await testDb.reset();
   apiCalls.length = 0;
+  fake = createFakeFactories();
+  localStorage.clear();
   vi.stubGlobal('fetch', vi.fn(fakeFetch));
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   Object.defineProperty(navigator, 'clipboard', {
@@ -63,7 +69,11 @@ afterEach(() => {
 
 function open(path: string) {
   window.history.pushState({}, '', path);
-  return render(<App />);
+  return render(
+    <PlayerAdapterProvider factories={fake.factories}>
+      <App />
+    </PlayerAdapterProvider>,
+  );
 }
 
 const type = (el: HTMLElement, value: string) => fireEvent.change(el, { target: { value } });
@@ -136,6 +146,10 @@ describe('edição de playlist (8.3, 9.x)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Subir: Demo' }));
     await waitFor(() => expect(trackNames()).toEqual(['Weird Fishes (ao vivo)', 'Demo', 'Título open.spotify.com']));
     await waitFor(() => expect(apiCalls.some((c) => c.endsWith('/tracks/order'))).toBe(true));
+    // espera a reordenação terminar: durante a mutação os controles ficam desabilitados (busy)
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Remover: Demo' }) as HTMLButtonElement).disabled).toBe(false),
+    );
 
     // 9.3 editar rótulo
     fireEvent.click(screen.getByRole('button', { name: 'Editar rótulo: Título open.spotify.com' }));
@@ -165,13 +179,15 @@ describe('edição de playlist (8.3, 9.x)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tocar: Spotify' }));
     let player = screen.getByRole('region', { name: 'Tocando agora' });
-    expect(player.querySelector('iframe')!.src).toBe('https://open.spotify.com/embed/track/4uLU6hMCjMI75M1A2tKUQC');
+    await waitFor(() =>
+      expect(player.querySelector('iframe')?.src).toBe('https://open.spotify.com/embed/track/4uLU6hMCjMI75M1A2tKUQC'),
+    );
     expect(within(player).getByRole('note').textContent).toMatch(/30 segundos/);
 
     fireEvent.click(screen.getByRole('button', { name: 'Tocar: YouTube' }));
     player = screen.getByRole('region', { name: 'Tocando agora' });
+    await waitFor(() => expect(player.querySelector('iframe')?.src).toMatch(/youtube-nocookie\.com\/embed\/dQw4w9WgXcQ/));
     expect(document.querySelectorAll('iframe')).toHaveLength(1);
-    expect(player.querySelector('iframe')!.src).toMatch(/youtube-nocookie\.com\/embed\/dQw4w9WgXcQ/);
     expect(within(player).queryByRole('note')).toBeNull();
     expect(within(player).getByRole('link', { name: /Abrir no YouTube/ }).getAttribute('href')).toBe(
       'https://youtu.be/dQw4w9WgXcQ',
@@ -224,7 +240,8 @@ describe('visualização compartilhada (10.3)', () => {
     expect(buttons).toEqual(['Tocar']);
     expect(screen.queryByLabelText('Link da faixa')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tocar: Faixa um' }));
-    expect(document.querySelector('iframe')!.src).toMatch(/youtube-nocookie/);
+    await waitFor(() => expect(document.querySelector('iframe')?.src).toMatch(/youtube-nocookie/));
+    expect(screen.queryByRole('button', { name: /Remover|Subir|Descer|Renomear|Excluir|rótulo/i })).toBeNull();
 
     // regenerar invalida o link antigo
     const [{ id }] = (await testDb.sql`select id from playlists`) as { id: string }[];
@@ -237,5 +254,98 @@ describe('visualização compartilhada (10.3)', () => {
     cleanup();
     open(oldPath);
     expect(await screen.findByRole('heading', { name: 'Playlist não encontrada.' })).toBeTruthy();
+  });
+});
+
+describe('reprodução contínua (5.x)', () => {
+  const playing = () =>
+    screen
+      .getAllByRole('button', { name: /^Tocando: / })
+      .map((b) => b.getAttribute('aria-label')!.replace('Tocando: ', ''));
+  const lastLoadId = () => fake.loads().at(-1)?.id;
+
+  async function threeTrackPlaylist() {
+    await createPlaylist('Contínua');
+    await addTrack('https://youtu.be/dQw4w9WgXcQ', 'Um');
+    await addTrack('https://soundcloud.com/artista/faixa', 'Dois');
+    await addTrack('https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC', 'Três');
+  }
+
+  it('fim da faixa avança para a próxima, inclusive trocando de plataforma (5.1)', async () => {
+    await threeTrackPlaylist();
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar: Um' }));
+    await waitFor(() => expect(lastLoadId()).toBe('dQw4w9WgXcQ'));
+    act(() => fake.events().onEnded());
+    await waitFor(() => expect(lastLoadId()).toBe('artista/faixa'));
+    expect(playing()).toEqual(['Dois']);
+    expect(fake.log.map((e) => `${e.platform}:${e.action}`)).toContain('youtube:destroy');
+  });
+
+  it('reordenar durante a reprodução altera a próxima; remover a atual fecha o player (5.1)', async () => {
+    await threeTrackPlaylist();
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar: Um' }));
+    await waitFor(() => expect(lastLoadId()).toBe('dQw4w9WgXcQ'));
+    fireEvent.click(screen.getByRole('button', { name: 'Subir: Três' }));
+    await waitFor(() => expect(trackNames()).toEqual(['Um', 'Três', 'Dois']));
+    act(() => fake.events().onEnded());
+    await waitFor(() => expect(lastLoadId()).toBe('4uLU6hMCjMI75M1A2tKUQC'));
+    expect(playing()).toEqual(['Três']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover: Três' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Tocando agora' })).toBeNull());
+  });
+
+  it('anterior/próxima e fim da playlist sem repetir (5.1)', async () => {
+    await threeTrackPlaylist();
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar: Dois' }));
+    await waitFor(() => expect(lastLoadId()).toBe('artista/faixa'));
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima faixa' }));
+    await waitFor(() => expect(playing()).toEqual(['Três']));
+    expect((screen.getByRole('button', { name: 'Próxima faixa' }) as HTMLButtonElement).disabled).toBe(true);
+    act(() => fake.events().onEnded());
+    await screen.findByText('Fim da reprodução.');
+    expect(playing()).toEqual(['Três']);
+    fireEvent.click(screen.getByRole('button', { name: 'Faixa anterior' }));
+    await waitFor(() => expect(playing()).toEqual(['Dois']));
+  });
+
+  it('link público: reprodução contínua com controles e sem edição (5.2)', async () => {
+    await threeTrackPlaylist();
+    const path = new URL((screen.getByLabelText(/Link público/) as HTMLInputElement).value).pathname;
+    cleanup();
+    open(path);
+    await screen.findByRole('heading', { name: 'Contínua' });
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar: Um' }));
+    await waitFor(() => expect(lastLoadId()).toBe('dQw4w9WgXcQ'));
+    act(() => fake.events().onEnded());
+    await waitFor(() => expect(lastLoadId()).toBe('artista/faixa'));
+    expect(playing()).toEqual(['Dois']);
+    expect(screen.getByRole('group', { name: 'Controles de reprodução' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Remover|Subir|Descer|Renomear|Excluir|rótulo|Arrastar/i })).toBeNull();
+    expect(screen.queryByLabelText('Link da faixa')).toBeNull();
+  });
+
+  it('abrir não toca nada sozinho; preferências persistem entre recarregamentos (5.3)', async () => {
+    await threeTrackPlaylist();
+    const path = window.location.pathname;
+    expect(screen.queryByRole('region', { name: 'Tocando agora' })).toBeNull();
+    expect(fake.loads()).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar: Um' }));
+    await waitFor(() => expect(lastLoadId()).toBe('dQw4w9WgXcQ'));
+    fireEvent.click(screen.getByRole('button', { name: 'Autoplay' }));
+    expect(screen.getByRole('button', { name: 'Autoplay' }).getAttribute('aria-pressed')).toBe('false');
+
+    cleanup();
+    fake = createFakeFactories();
+    open(path);
+    await screen.findByRole('heading', { name: 'Contínua' });
+    expect(fake.loads()).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar: Um' }));
+    await waitFor(() => expect(lastLoadId()).toBe('dQw4w9WgXcQ'));
+    expect(screen.getByRole('button', { name: 'Autoplay' }).getAttribute('aria-pressed')).toBe('false');
+    act(() => fake.events().onEnded());
+    expect(fake.loads()).toHaveLength(1);
+    expect(playing()).toEqual(['Um']);
   });
 });

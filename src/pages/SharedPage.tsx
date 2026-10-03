@@ -3,8 +3,12 @@ import { useParams } from 'react-router-dom';
 import type { SharedPlaylist } from '../../shared/types';
 import { NotFound } from '../App';
 import { ApiError, api } from '../api/client';
-import { EmbedPlayer } from '../components/EmbedPlayer';
+import { PlayerPanel } from '../components/PlayerPanel';
 import { TrackList } from '../components/TrackList';
+import { usePlayback } from '../player/usePlayback';
+
+// A resposta pública não tem ids de faixa: a posição serve de chave na fila.
+const keyOf = (position: number) => String(position);
 
 /** Visualização pública: só leitura e reprodução, sem nenhum controle de edição. */
 export function SharedPage() {
@@ -12,7 +16,7 @@ export function SharedPage() {
   const [playlist, setPlaylist] = useState<SharedPlaylist | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentIndex, setCurrentIndex] = useState<number | null>(null);
+  const playback = usePlayback(playlist ? playlist.tracks.map((t) => keyOf(t.position)) : []);
 
   useEffect(() => {
     api
@@ -33,7 +37,8 @@ export function SharedPage() {
     );
   }
 
-  const current = currentIndex !== null ? playlist.tracks[currentIndex] : null;
+  const index = playlist.tracks.findIndex((t) => keyOf(t.position) === playback.currentId);
+  const current = index >= 0 ? playlist.tracks[index] : null;
 
   return (
     <main className="page">
@@ -43,11 +48,11 @@ export function SharedPage() {
           Playlist compartilhada · {playlist.tracks.length} {playlist.tracks.length === 1 ? 'faixa' : 'faixas'}
         </p>
       </header>
-      {current && <EmbedPlayer track={current} />}
+      <PlayerPanel track={current} playback={playback} />
       <TrackList
         tracks={playlist.tracks}
-        currentIndex={currentIndex}
-        onPlay={setCurrentIndex}
+        currentIndex={index >= 0 ? index : null}
+        onPlay={(i) => playback.play(keyOf(playlist.tracks[i].position))}
         emptyState="Esta playlist ainda não tem faixas."
       />
     </main>

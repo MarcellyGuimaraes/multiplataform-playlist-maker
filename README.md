@@ -15,6 +15,21 @@ O banco guarda apenas **referências** às faixas (link, plataforma, identificad
 - **Banco:** Neon Postgres via `@neondatabase/serverless` (driver HTTP), SQL puro
 - **Compartilhado:** `shared/` — parser de links, schemas de validação e tipos usados por front e API
 
+## Reprodução contínua
+
+Ao terminar uma faixa, o app carrega e toca a próxima sozinho, inclusive quando ela é de outra plataforma. Funciona na tela de edição e no link público.
+
+- **Controles no player:** anterior, próxima, **Autoplay** (ligado por padrão), **Repetir** (ao fim da última faixa, volta à primeira) e **Aleatório** (cada faixa toca uma vez por ciclo; a ordem salva da playlist não muda). As preferências ficam só no navegador de quem ouve (`localStorage`, chave `playback-prefs:v1`).
+- **Como funciona:** YouTube e SoundCloud são controlados pelas APIs oficiais de player, carregadas no navegador sob demanda — [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference) e [SoundCloud Widget API](https://developers.soundcloud.com/docs/api/html5-widget). O Spotify usa o mesmo iframe de embed do MVP, controlado pelas mensagens que o próprio embed troca com a página (o protocolo que a [Spotify iFrame API](https://developer.spotify.com/documentation/embeds/references/iframe-api) usa por baixo). Não usamos o script da iFrame API porque o iframe criado por ela tocava só a prévia de 30 s mesmo com login. Código em `src/player/` (fila em `queue.ts`, estado em `usePlayback.ts`, adaptadores em `adapters/`). O servidor não participa da reprodução.
+- A primeira faixa sempre começa por um clique em **Tocar**: abrir uma playlist não toca nada sozinho.
+
+**Limitações:**
+
+- **Políticas de autoplay dos navegadores.** Safari/iOS e algumas configurações de outros navegadores podem impedir o início automático da próxima faixa, principalmente ao trocar de plataforma. Nesse caso a faixa fica carregada com o aviso "toque em play para continuar", e a fila segue depois disso. Faixas seguidas da mesma plataforma reaproveitam o mesmo player, o que costuma evitar o bloqueio.
+- **Abas em segundo plano e tela bloqueada** podem pausar ou atrasar a troca de faixa, conforme o navegador.
+- **Spotify:** o embed não avisa quando a faixa termina; o fim é inferido pelo progresso (o fim da prévia de 30 s, para quem não tem login, também conta). Faixas indisponíveis só são puladas quando o embed informa o erro; se não pular, use **Próxima**. O protocolo de mensagens do embed não é documentado pelo Spotify: se mudar, o player continua tocando, mas o avanço automático do Spotify para. YouTube e SoundCloud pulam faixas indisponíveis automaticamente após ~3 s.
+- Se o script oficial de uma plataforma não carregar, o player volta ao iframe simples (toca, mas sem avanço automático) e mostra um aviso.
+
 ## Configuração do banco (Neon)
 
 1. Crie uma conta em <https://neon.tech> e um projeto no plano gratuito (região próxima, ex.: `sa-east-1`).
@@ -65,7 +80,8 @@ npm test
 - `shared/*.test.ts` — parser de links (todos os formatos aceitos e rejeitados) e limites de validação.
 - `api/_lib/*.test.ts` — oEmbed e resolução de link curto com `fetch` simulado.
 - `tests/api/*.test.ts` — handlers da API. Os de faixas e compartilhamento rodam contra um **Postgres real em memória** ([PGlite](https://pglite.dev)) com a migração aplicada, então o SQL é exercitado de verdade.
-- `src/components/*.test.tsx` — players embutidos e lista somente leitura.
+- `src/components/*.test.tsx` — player, controles de reprodução e lista somente leitura.
+- `src/player/*.test.ts` — fila (limites, repetir, aleatório), preferências, carregador de SDK, estado de reprodução (com temporizadores) e os três adaptadores, com SDKs falsos.
 - `tests/ui/*.test.tsx` — fluxos de ponta a ponta da interface (jsdom): páginas React reais com o `fetch` roteado para os handlers reais sobre PGlite.
 
 ## Deploy (Vercel)
@@ -92,9 +108,8 @@ Rollback: promova o deploy anterior no painel da Vercel (as migrações do MVP s
 | PUT | `/api/playlists/:id/tracks/order` | reordena `{ trackIds }` (conjunto exato, senão 409) |
 | GET | `/api/shared/:token` | leitura pública (sem ids internos) |
 
-## Segurança e limitações do MVP
+## Segurança e limitações
 
 - **Sem autenticação.** Quem souber o id interno de uma playlist (UUID na URL `/p/:id`) pode editá-la. O link público (`/s/:token`) usa um token aleatório de 128 bits, distinto do id, e não dá acesso a nenhuma escrita. Se um link público vazar, use **Gerar novo link** para invalidá-lo.
-- Sem reprodução contínua automática: ao fim de uma faixa, escolha a próxima manualmente.
 - Adição de faixas apenas colando links — não há busca de músicas.
 - **Metadados do SoundCloud podem vir vazios.** O endpoint oEmbed do SoundCloud fica atrás de um WAF que responde com desafio anti-bot (HTTP 202 sem corpo) a requisições de servidor. Nesse caso a faixa é adicionada normalmente, sem título/artista/thumbnail em cache — use o rótulo para identificá-la. YouTube e Spotify não têm esse problema.

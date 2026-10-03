@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SharedTrack } from '../../shared/types';
 import { displayName, embedUrl } from '../embed';
+import { PlayerAdapterProvider } from '../player/PlayerAdapterContext';
+import { createFakeFactories } from '../player/testing';
+import type { LoadRequest } from '../player/usePlayback';
 import { EmbedPlayer } from './EmbedPlayer';
 import { TrackList } from './TrackList';
 
@@ -58,11 +61,25 @@ describe('displayName', () => {
 });
 
 describe('EmbedPlayer', () => {
-  it('YouTube: iframe oficial + metadados em cache + link original', () => {
-    const { container } = render(<EmbedPlayer track={yt} />);
-    const iframes = container.querySelectorAll('iframe');
-    expect(iframes).toHaveLength(1);
-    expect(iframes[0].getAttribute('src')).toBe(embedUrl(yt));
+  let nonce = 0;
+  const req = (id: string): LoadRequest => ({ id, autoplay: true, nonce: ++nonce });
+  const noop = { onPlaying() {}, onPaused() {}, onEnded() {}, onError() {} };
+
+  function renderPlayer(track: SharedTrack, extra: Partial<Parameters<typeof EmbedPlayer>[0]> = {}) {
+    const fake = createFakeFactories();
+    const ui = (t: SharedTrack, e = extra) => (
+      <PlayerAdapterProvider factories={fake.factories}>
+        <EmbedPlayer track={t} request={req(t.externalId)} events={noop} {...e} />
+      </PlayerAdapterProvider>
+    );
+    const r = render(ui(track));
+    return { ...r, fake, rerenderTrack: (t: SharedTrack, e?: typeof extra) => r.rerender(ui(t, e)) };
+  }
+
+  it('YouTube: monta o player e carrega a faixa; metadados em cache + link original', async () => {
+    const { container, fake } = renderPlayer(yt);
+    await waitFor(() => expect(container.querySelector('iframe')?.getAttribute('src')).toBe(embedUrl(yt)));
+    expect(fake.loads()).toEqual([{ platform: 'youtube', action: 'load', id: yt.externalId, autoplay: true }]);
     expect(screen.getByText('Weird Fishes (ao vivo)')).toBeTruthy();
     expect(screen.getByText(/Radiohead - Weird Fishes Live · Radiohead/)).toBeTruthy();
     expect(screen.getByRole('link', { name: /Abrir no YouTube/ }).getAttribute('href')).toBe(yt.originalUrl);
@@ -70,21 +87,61 @@ describe('EmbedPlayer', () => {
   });
 
   it('Spotify: mostra o aviso de login e prévia de 30 segundos', () => {
-    render(<EmbedPlayer track={sp} />);
+    renderPlayer(sp);
     expect(screen.getByRole('note').textContent).toMatch(/login.*30 segundos/s);
   });
 
-  it('SoundCloud: usa a URL canônica mesmo com link curto original', () => {
-    const { container } = render(<EmbedPlayer track={sc} />);
-    expect(container.querySelector('iframe')!.getAttribute('src')).toContain(encodeURIComponent(sc.canonicalUrl));
+  it('SoundCloud: o player recebe a URL canônica mesmo com link curto original', async () => {
+    const { container } = renderPlayer(sc);
+    await waitFor(() =>
+      expect(container.querySelector('iframe')?.getAttribute('src')).toContain(encodeURIComponent(sc.canonicalUrl)),
+    );
   });
 
-  it('trocar de faixa substitui o player (um único ativo)', () => {
-    const { container, rerender } = render(<EmbedPlayer track={sp} />);
-    rerender(<EmbedPlayer track={yt} />);
-    const iframes = container.querySelectorAll('iframe');
-    expect(iframes).toHaveLength(1);
-    expect(iframes[0].getAttribute('src')).toBe(embedUrl(yt));
+  it('trocar de plataforma destrói o player anterior (um único ativo)', async () => {
+    const { container, fake, rerenderTrack } = renderPlayer(sp);
+    await waitFor(() => expect(fake.loads()).toHaveLength(1));
+    rerenderTrack(yt);
+    await waitFor(() => expect(fake.loads()).toHaveLength(2));
+    expect(fake.log.map((e) => `${e.platform}:${e.action}`)).toEqual([
+      'spotify:mount', 'spotify:load', 'spotify:destroy', 'youtube:mount', 'youtube:load',
+    ]);
+    expect(container.querySelectorAll('iframe')).toHaveLength(1);
+  });
+
+  it('mesma plataforma reaproveita o player', async () => {
+    const yt2 = { ...yt, externalId: 'aaaaaaaaaaa', label: 'outra' };
+    const { fake, rerenderTrack } = renderPlayer(yt);
+    await waitFor(() => expect(fake.loads()).toHaveLength(1));
+    rerenderTrack(yt2);
+    await waitFor(() => expect(fake.loads()).toHaveLength(2));
+    expect(fake.log.filter((e) => e.action === 'mount')).toHaveLength(1);
+    expect(fake.log.some((e) => e.action === 'destroy')).toBe(false);
+  });
+
+  it('avisos de indisponível, bloqueado e fim', () => {
+    const { rerenderTrack } = renderPlayer(yt, { status: 'unavailable', autoplay: true });
+    expect(screen.getByRole('status').textContent).toMatch(/indisponível.*Pulando/);
+    rerenderTrack(yt, { status: 'blocked' });
+    expect(screen.getByRole('status').textContent).toMatch(/bloqueou o início automático/);
+    rerenderTrack(yt, { status: 'playing' });
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
+  it('SDK indisponível: cai para iframe simples e avisa', async () => {
+    const failing = createFakeFactories();
+    failing.factories.youtube = async () => {
+      throw new Error('falhou');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { container } = render(
+      <PlayerAdapterProvider factories={failing.factories}>
+        <EmbedPlayer track={yt} request={req('x')} events={noop} />
+      </PlayerAdapterProvider>,
+    );
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/avance as faixas manualmente/));
+    expect(container.querySelector('iframe')!.getAttribute('src')).toBe(embedUrl(yt));
+    warn.mockRestore();
   });
 });
 

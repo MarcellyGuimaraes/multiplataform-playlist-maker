@@ -8,6 +8,19 @@ import { loadEnv, type Plugin } from 'vite';
 
 type Route = { pattern: RegExp; params: string[]; file: string; dynamic: number };
 
+/** Marca que a DATABASE_URL em process.env foi copiada do .env por este plugin. */
+const FROM_ENV_FILE = '__DEV_API_DATABASE_URL_FROM_ENV_FILE';
+
+/** Usuário e host da connection string, sem a senha — para o log mostrar qual banco está em uso. */
+export function describeDbUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${decodeURIComponent(u.username)}@${u.hostname}${u.pathname}`;
+  } catch {
+    return 'DATABASE_URL inválida';
+  }
+}
+
 export function devApi(): Plugin {
   return {
     name: 'dev-api',
@@ -15,8 +28,18 @@ export function devApi(): Plugin {
     apply: (_config, { command }) => command === 'serve' && !process.env.VITEST,
     async configureServer(server) {
       const root = server.config.root;
+      // O loadEnv do Vite dá prioridade ao que já está em process.env. Se o valor atual foi posto por
+      // este plugin (lido do .env num início anterior do mesmo processo), descarta-o para que uma edição
+      // do .env passe a valer quando o Vite reinicia — senão o valor antigo ficaria preso até matar o processo.
+      if (process.env[FROM_ENV_FILE]) {
+        delete process.env.DATABASE_URL;
+        delete process.env[FROM_ENV_FILE];
+      }
       const env = loadEnv(server.config.mode, root, '');
-      if (env.DATABASE_URL) process.env.DATABASE_URL = env.DATABASE_URL;
+      if (env.DATABASE_URL && !process.env.DATABASE_URL) {
+        process.env.DATABASE_URL = env.DATABASE_URL;
+        process.env[FROM_ENV_FILE] = '1';
+      }
 
       let localSql: unknown;
       if (!process.env.DATABASE_URL) {
@@ -24,7 +47,7 @@ export function devApi(): Plugin {
         localSql = (await openPglite(join(root, '.dev-db'), join(root, 'db', 'migrations'))).sql;
         server.config.logger.info('  [dev-api] Banco: PGlite local em .dev-db/ (sem DATABASE_URL)');
       } else {
-        server.config.logger.info('  [dev-api] Banco: Neon (DATABASE_URL do .env)');
+        server.config.logger.info(`  [dev-api] Banco: Neon — ${describeDbUrl(process.env.DATABASE_URL)}`);
       }
 
       server.middlewares.use(async (req, res, next) => {

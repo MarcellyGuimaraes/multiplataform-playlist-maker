@@ -6,10 +6,11 @@ import type { PlaylistDetail, Track } from '../../shared/types';
 import { NotFound } from '../App';
 import { ApiError, api, shareUrl } from '../api/client';
 import { AddTrackForm } from '../components/AddTrackForm';
-import { EmbedPlayer } from '../components/EmbedPlayer';
+import { PlayerPanel } from '../components/PlayerPanel';
 import { SortableItem, SortableTracks } from '../components/SortableTracks';
 import { TrackList } from '../components/TrackList';
 import { displayName } from '../embed';
+import { usePlayback } from '../player/usePlayback';
 
 const withPositions = (tracks: Track[]) => tracks.map((t, position) => ({ ...t, position }));
 
@@ -20,7 +21,7 @@ export function PlaylistPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [currentId, setCurrentId] = useState<string | null>(null);
+  const playback = usePlayback(playlist ? playlist.tracks.map((t) => t.id) : []);
 
   const load = useCallback(async () => {
     try {
@@ -60,7 +61,7 @@ export function PlaylistPage() {
 
   const tracks = playlist.tracks;
   const setTracks = (next: Track[]) => setPlaylist((p) => (p ? { ...p, tracks: withPositions(next) } : p));
-  const currentIndex = tracks.findIndex((t) => t.id === currentId);
+  const currentIndex = tracks.findIndex((t) => t.id === playback.currentId);
   const current = currentIndex >= 0 ? tracks[currentIndex] : null;
 
   async function addTrack(url: string, label: string) {
@@ -82,7 +83,6 @@ export function PlaylistPage() {
     void mutate(async () => {
       await api.deleteTrack(id, track.id);
       setTracks(tracks.filter((t) => t.id !== track.id));
-      if (track.id === currentId) setCurrentId(null);
     });
   }
 
@@ -127,13 +127,13 @@ export function PlaylistPage() {
 
       <AddTrackForm onAdd={addTrack} />
 
-      {current && <EmbedPlayer track={current} />}
+      <PlayerPanel track={current} playback={playback} />
 
       <SortableTracks ids={tracks.map((t) => t.id)} disabled={busy} onMove={move}>
         <TrackList
           tracks={tracks}
           currentIndex={currentIndex >= 0 ? currentIndex : null}
-          onPlay={(i) => setCurrentId(tracks[i].id)}
+          onPlay={(i) => playback.play(tracks[i].id)}
           itemKey={(t) => t.id}
           busy={busy}
           edit={{ onMove: move, onDelete: remove, onSaveLabel: saveLabel }}

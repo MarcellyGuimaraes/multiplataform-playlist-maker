@@ -20,12 +20,19 @@ Ao selecionar uma faixa para tocar, o sistema SHALL exibir o player embutido ofi
 - **WHEN** um player do Spotify está ativo e a usuária seleciona uma faixa do YouTube
 - **THEN** o player do Spotify é removido e o player do YouTube é exibido no lugar
 
-### Requirement: Sem reprodução contínua automática
-O sistema MUST NOT iniciar automaticamente a próxima faixa ao término da atual nem usar SDKs de controle de player no MVP. Avançar para outra faixa SHALL exigir uma ação da usuária.
+### Requirement: Controle dos players pelas interfaces oficiais
+O sistema SHALL controlar os players embutidos oficiais apenas pelas interfaces que as próprias plataformas oferecem no navegador: a YouTube IFrame Player API, a SoundCloud Widget API e, no Spotify, as mensagens que o iframe de embed oficial troca com a página. Essas mensagens são o mesmo protocolo que a Spotify iFrame API usa internamente. O controle SHALL se limitar a carregar faixas, solicitar reprodução e receber eventos de estado (início, pausa, progresso, fim e erro). O servidor MUST NOT participar da reprodução, e as APIs de dados restritas das plataformas MUST NOT ser usadas.
 
-#### Scenario: Fim da faixa
-- **WHEN** a faixa atual termina de tocar no player embutido
-- **THEN** o app não carrega nem toca a próxima faixa sozinho
+#### Scenario: Detectar o fim de uma faixa
+- **WHEN** uma faixa termina de tocar no player embutido
+- **THEN** o app recebe essa informação pela interface oficial do player da plataforma, no navegador, sem nenhuma requisição à API do app
+
+### Requirement: Spotify mantém o iframe de embed do MVP
+O player do Spotify SHALL continuar sendo o mesmo iframe de embed oficial usado no MVP (`open.spotify.com/embed/track/<id>`, sem parâmetros adicionais), para que quem tem login no Spotify continue ouvindo a faixa completa. O sistema MUST NOT trocar esse iframe por outro que limite a reprodução à prévia.
+
+#### Scenario: Ouvinte com login no Spotify
+- **WHEN** alguém com login no Spotify neste navegador toca uma faixa do Spotify no app
+- **THEN** a faixa toca completa, como no MVP, e o avanço automático continua funcionando ao fim dela
 
 ### Requirement: Ressalva da prévia do Spotify
 O sistema SHALL exibir, junto ao player do Spotify, um aviso de que a faixa completa só toca se o ouvinte estiver logado na sua conta Spotify no navegador, e que caso contrário o Spotify toca apenas uma prévia de 30 segundos. O sistema MUST NOT tentar contornar essa limitação.

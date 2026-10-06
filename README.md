@@ -25,7 +25,7 @@ Ao terminar uma faixa, o app carrega e toca a próxima sozinho, inclusive quando
 
 **Limitações:**
 
-- **Políticas de autoplay dos navegadores.** Safari/iOS e algumas configurações de outros navegadores podem impedir o início automático da próxima faixa, principalmente ao trocar de plataforma. Nesse caso a faixa fica carregada com o aviso "toque em play para continuar", e a fila segue depois disso. Faixas seguidas da mesma plataforma reaproveitam o mesmo player, o que costuma evitar o bloqueio.
+- **Políticas de autoplay dos navegadores.** Safari/iOS e algumas configurações de outros navegadores podem impedir o início automático da próxima faixa, principalmente ao trocar de plataforma. Nesse caso a faixa fica carregada com o aviso "toque em play para continuar", e a fila segue depois disso. Faixas seguidas da mesma plataforma reaproveitam o mesmo player, o que costuma evitar o bloqueio. Na verificação manual de outubro de 2026, no Firefox desktop e num celular, o início automático não foi bloqueado em nenhum caso.
 - **Abas em segundo plano e tela bloqueada** podem pausar ou atrasar a troca de faixa, conforme o navegador.
 - **Spotify:** o embed não avisa quando a faixa termina; o fim é inferido pelo progresso (o fim da prévia de 30 s, para quem não tem login, também conta). Faixas indisponíveis só são puladas quando o embed informa o erro; se não pular, use **Próxima**. O protocolo de mensagens do embed não é documentado pelo Spotify: se mudar, o player continua tocando, mas o avanço automático do Spotify para. YouTube e SoundCloud pulam faixas indisponíveis automaticamente após ~3 s.
 - Se o script oficial de uma plataforma não carregar, o player volta ao iframe simples (toca, mas sem avanço automático) e mostra um aviso.

@@ -25,7 +25,7 @@
 - [x] 4.1 Refatorar `src/components/EmbedPlayer.tsx` para montar o adaptador da plataforma num contêiner (reaproveitando a instância entre faixas da mesma plataforma e destruindo ao trocar), mantendo rótulo, metadados, link original e aviso do Spotify, e verificar que os testes existentes de `components.test.tsx` continuam passando, adaptados ao adaptador falso
 - [x] 4.2 Criar `PlayerAdapterProvider` (registro de adaptadores injetável, com os reais por padrão) e verificar com teste que o `EmbedPlayer` usa o adaptador injetado
 - [x] 4.3 Criar `src/components/PlaybackControls.tsx` (anterior, próxima, toggles Autoplay/Repetir/Aleatório com `aria-pressed`, limites desabilitados sem repetir) e os avisos `unavailable`/`blocked` com `role="status"`, e verificar com testes de componente estados, rótulos acessíveis e navegação por teclado
-- [ ] 4.4 Ajustar estilos em `src/styles.css` (controles no player sticky, avisos, foco visível, layout em 360 px de largura) e verificar no `npm run dev` em larguras de celular e desktop
+- [x] 4.4 Ajustar estilos em `src/styles.css` (controles no player sticky, avisos, foco visível, layout em 360 px de largura) e verificar no `npm run dev` em larguras de celular e desktop
 
 ## 5. Integração nas telas
 
@@ -39,7 +39,7 @@
 
 ## 7. Verificação em navegador real e deploy
 
-- [ ] 7.1 No `npm run dev`, em Chrome desktop, montar uma playlist YouTube → SoundCloud → Spotify → YouTube e confirmar o avanço automático entre plataformas, anterior/próxima, repetir, aleatório e o liga/desliga do autoplay; registrar no DevTools que nenhuma requisição de mídia vai para `/api` e que a CSP não bloqueia os SDKs
-- [ ] 7.2 Confirmar com um vídeo removido do YouTube que o aviso aparece e a faixa é pulada em cerca de 3 s, e, sem login no Spotify, que o fim da prévia de 30 s avança
-- [ ] 7.3 Testar em Firefox e num celular (Safari/iOS ou Chrome Android), registrar no README se o início automático é bloqueado e confirmar que o aviso "toque em play" aparece e a fila continua
-- [ ] 7.4 Fazer deploy de Preview na Vercel (com confirmação da dona), repetir o roteiro 7.1 no link público e promover para produção
+- [x] 7.1 No `npm run dev`, em Chrome desktop, montar uma playlist YouTube → SoundCloud → Spotify → YouTube e confirmar o avanço automático entre plataformas, anterior/próxima, repetir, aleatório e o liga/desliga do autoplay; registrar no DevTools que nenhuma requisição de mídia vai para `/api` e que a CSP não bloqueia os SDKs
+- [x] 7.2 Confirmar com um vídeo removido do YouTube que o aviso aparece e a faixa é pulada em cerca de 3 s, e, sem login no Spotify, que o fim da prévia de 30 s avança
+- [x] 7.3 Testar em Firefox e num celular (Safari/iOS ou Chrome Android), registrar no README se o início automático é bloqueado e confirmar que o aviso "toque em play" aparece e a fila continua
+- [x] 7.4 Fazer deploy de Preview na Vercel (com confirmação da dona), repetir o roteiro 7.1 no link público e promover para produção

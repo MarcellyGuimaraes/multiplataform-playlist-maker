@@ -1,11 +1,14 @@
 // Cliente tipado da API. O front nunca fala com o banco: tudo passa por /api.
+// O cookie de sessão é HttpOnly e vai sozinho (fetch usa credentials: 'same-origin' por padrão).
 import type {
   ApiErrorBody,
   ApiErrorCode,
+  AuthUser,
   PlaylistDetail,
-  PlaylistSummary,
+  PlaylistList,
   SharedPlaylist,
   Track,
+  Visibility,
 } from '../../shared/types';
 
 export class ApiError extends Error {
@@ -17,6 +20,9 @@ export class ApiError extends Error {
     super(message);
   }
 }
+
+/** Sessão ausente ou expirada: a tela deve levar ao login. */
+export const isUnauthorized = (e: unknown): e is ApiError => e instanceof ApiError && e.status === 401;
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
@@ -33,6 +39,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const err = (data as ApiErrorBody | null)?.error;
+    if (res.status === 401) {
+      throw new ApiError(401, 'unauthorized', err?.message ?? 'Entre na sua conta para continuar.');
+    }
     throw new ApiError(res.status, err?.code ?? 'internal', err?.message ?? 'Erro inesperado. Tente novamente.');
   }
   return data as T;
@@ -41,12 +50,23 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 const enc = encodeURIComponent;
 
 export const api = {
-  listPlaylists: () => request<PlaylistSummary[]>('GET', '/playlists'),
+  me: () => request<{ user: AuthUser | null }>('GET', '/auth/me'),
+  signup: (email: string, password: string) =>
+    request<{ user: AuthUser }>('POST', '/auth/signup', { email, password }),
+  login: (email: string, password: string) => request<{ user: AuthUser }>('POST', '/auth/login', { email, password }),
+  logout: () => request<void>('POST', '/auth/logout'),
+  requestPasswordReset: (email: string) => request<{ message: string }>('POST', '/auth/password-reset', { email }),
+  confirmPasswordReset: (token: string, password: string) =>
+    request<void>('POST', '/auth/password-reset/confirm', { token, password }),
+
+  listPlaylists: () => request<PlaylistList>('GET', '/playlists'),
   createPlaylist: (name: string) => request<PlaylistDetail>('POST', '/playlists', { name }),
   getPlaylist: (id: string) => request<PlaylistDetail>('GET', `/playlists/${enc(id)}`),
   renamePlaylist: (id: string, name: string) =>
     request<Omit<PlaylistDetail, 'tracks'>>('PATCH', `/playlists/${enc(id)}`, { name }),
   deletePlaylist: (id: string) => request<void>('DELETE', `/playlists/${enc(id)}`),
+  setVisibility: (id: string, visibility: Visibility) =>
+    request<Omit<PlaylistDetail, 'tracks'>>('PUT', `/playlists/${enc(id)}/visibility`, { visibility }),
   regenerateShareToken: (id: string) =>
     request<{ shareToken: string }>('POST', `/playlists/${enc(id)}/share-token`),
 

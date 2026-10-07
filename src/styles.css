@@ -460,3 +460,106 @@ button.toggle.is-on {
     padding-inline: 6px;
   }
 }
+
+/* Contas */
+.site-header {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 12px 16px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.site-header > .error {
+  flex-basis: 100%;
+}
+
+.site-title {
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.site-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.auth-page {
+  max-width: 440px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-form button {
+  align-self: flex-start;
+}
+
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+a.button {
+  display: inline-block;
+  font-size: 0.9rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 8px;
+  padding: 7px 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.playlist-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.visibility-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--muted);
+}
+
+.visibility-badge.is-public {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.visibility-status {
+  margin: 0;
+}
+
+.share-link {
+  flex: 1 1 100%;
+}

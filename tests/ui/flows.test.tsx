@@ -20,6 +20,8 @@ let testDb: Awaited<ReturnType<typeof createTestDb>>;
 const apiCalls: string[] = [];
 // Os SDKs oficiais de player não rodam em jsdom: os fluxos usam adaptadores falsos que registram as cargas.
 let fake: ReturnType<typeof createFakeFactories>;
+/** Cookie de sessão do "navegador" (`sid=...`); vazio = visitante. */
+let cookieJar = '';
 
 async function fakeFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const url = new URL(String(input), 'http://localhost');
@@ -37,9 +39,13 @@ async function fakeFetch(input: string | URL | Request, init?: RequestInit): Pro
       method: init?.method ?? 'GET',
       query: { ...Object.fromEntries(url.searchParams), ...match.params },
       body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      cookie: cookieJar || undefined,
     }),
     res,
   );
+  // Como o navegador: guarda o cookie de sessão recebido e o apaga quando expira (Max-Age=0).
+  const setCookie = res.headers['set-cookie'];
+  if (setCookie) cookieJar = /Max-Age=0(;|$)/.test(setCookie) ? '' : setCookie.split(';')[0];
   if (res.statusCode === 204) return new Response(null, { status: 204 });
   return Response.json(res.body, { status: res.statusCode });
 }
@@ -52,10 +58,17 @@ afterAll(() => testDb.db.close());
 
 beforeEach(async () => {
   await testDb.reset();
-  apiCalls.length = 0;
   fake = createFakeFactories();
   localStorage.clear();
   vi.stubGlobal('fetch', vi.fn(fakeFetch));
+  // Os fluxos de edição rodam com uma conta logada (a dona das playlists criadas).
+  cookieJar = '';
+  await fakeFetch('/api/auth/signup', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'maria@exemplo.com', password: 'segredo123' }),
+  });
+  apiCalls.length = 0;
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   Object.defineProperty(navigator, 'clipboard', {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -84,6 +97,12 @@ async function createPlaylist(name: string) {
   type(screen.getByLabelText('Nova playlist'), name);
   fireEvent.click(screen.getByRole('button', { name: 'Criar' }));
   await screen.findByRole('heading', { name });
+}
+
+/** Torna pública a playlist aberta (nasce privada) e devolve o campo do link público. */
+async function publish() {
+  fireEvent.click(screen.getByRole('button', { name: 'Tornar pública' }));
+  return (await screen.findByLabelText(/Link público/)) as HTMLInputElement;
 }
 
 async function addTrack(url: string, label = '') {
@@ -201,7 +220,7 @@ describe('edição de playlist (8.3, 9.x)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
     await screen.findByRole('heading', { name: 'Nova' });
 
-    const linkInput = screen.getByLabelText(/Link público/) as HTMLInputElement;
+    const linkInput = await publish();
     const firstLink = linkInput.value;
     expect(firstLink).toMatch(/\/s\/[A-Za-z0-9_-]{22}$/);
     fireEvent.click(screen.getByRole('button', { name: 'Copiar link público' }));
@@ -229,9 +248,12 @@ describe('visualização compartilhada (10.3)', () => {
   it('somente leitura, com player; token antigo vira "não encontrada"', async () => {
     await createPlaylist('Pública');
     await addTrack('https://youtu.be/dQw4w9WgXcQ', 'Faixa um');
-    const oldLink = (screen.getByLabelText(/Link público/) as HTMLInputElement).value;
+    const oldLink = (await publish()).value;
     const oldPath = new URL(oldLink).pathname;
 
+    // abre como visitante, numa "janela anônima"
+    const session = cookieJar;
+    cookieJar = '';
     cleanup();
     open(oldPath);
     await screen.findByRole('heading', { name: 'Pública' });
@@ -245,12 +267,14 @@ describe('visualização compartilhada (10.3)', () => {
 
     // regenerar invalida o link antigo
     const [{ id }] = (await testDb.sql`select id from playlists`) as { id: string }[];
+    cookieJar = session;
     cleanup();
     open(`/p/${id}`);
     await screen.findByRole('heading', { name: 'Pública' });
     fireEvent.click(screen.getByRole('button', { name: 'Gerar novo link' }));
     await waitFor(() => expect((screen.getByLabelText(/Link público/) as HTMLInputElement).value).not.toBe(oldLink));
 
+    cookieJar = '';
     cleanup();
     open(oldPath);
     expect(await screen.findByRole('heading', { name: 'Playlist não encontrada.' })).toBeTruthy();
@@ -311,7 +335,8 @@ describe('reprodução contínua (5.x)', () => {
 
   it('link público: reprodução contínua com controles e sem edição (5.2)', async () => {
     await threeTrackPlaylist();
-    const path = new URL((screen.getByLabelText(/Link público/) as HTMLInputElement).value).pathname;
+    const path = new URL((await publish()).value).pathname;
+    cookieJar = '';
     cleanup();
     open(path);
     await screen.findByRole('heading', { name: 'Contínua' });

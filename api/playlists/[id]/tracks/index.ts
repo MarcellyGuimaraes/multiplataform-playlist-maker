@@ -1,5 +1,6 @@
 import { parseTrackUrl } from '../../../../shared/parseTrackUrl.js';
 import { addTrackSchema } from '../../../../shared/schemas.js';
+import { requireUser } from '../../../_lib/auth.js';
 import { getSql } from '../../../_lib/db.js';
 import { badRequest, isUuid, notFound, param, parseBody, route } from '../../../_lib/http.js';
 import { fetchMetadata } from '../../../_lib/oembed.js';
@@ -9,6 +10,8 @@ import { toTrack, type TrackRow } from '../../../_lib/rows.js';
 /** Adiciona uma faixa ao final da playlist a partir de um link colado. Só referências são gravadas. */
 export default route({
   async POST(req, res) {
+    const user = await requireUser(req, res);
+    if (!user) return;
     const id = param(req, 'id');
     if (!isUuid(id)) return notFound(res, 'Playlist não encontrada.');
     const body = parseBody(req, res, addTrackSchema);
@@ -21,7 +24,7 @@ export default route({
     const meta = await fetchMetadata(parsed);
     const sql = getSql();
     const [row] = (await sql`
-      with p as (select id from playlists where id = ${id}),
+      with p as (select id from playlists where id = ${id} and owner_id = ${user.id}),
       ins as (
         insert into tracks (
           playlist_id, original_url, canonical_url, platform, external_id, label, position,

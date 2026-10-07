@@ -11,12 +11,25 @@ export function sendError(res: VercelResponse, status: number, code: ApiErrorCod
 }
 
 export const badRequest = (res: VercelResponse, message: string) => sendError(res, 400, 'validation', message);
-export const notFound = (res: VercelResponse, message = 'Não encontrado.') => sendError(res, 404, 'not_found', message);
+export const unauthorized = (res: VercelResponse, message = 'Entre na sua conta para continuar.') =>
+  sendError(res, 401, 'unauthorized', message);
+export const notFound =(res: VercelResponse, message = 'Não encontrado.') => sendError(res, 404, 'not_found', message);
 export const conflict = (res: VercelResponse, message: string) => sendError(res, 409, 'conflict', message);
+
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+function hasBody(req: VercelRequest): boolean {
+  const length = Number(req.headers['content-length'] ?? 0);
+  return length > 0 || req.headers['transfer-encoding'] !== undefined || (req.body !== undefined && req.body !== '');
+}
+
+const isJson = (req: VercelRequest) => /^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? '');
 
 /**
  * Despacha por método HTTP e converte qualquer exceção em 500 genérico.
  * O detalhe do erro vai só para o log do servidor, nunca para a resposta.
+ * Escritas com corpo precisam ser JSON: isso exige preflight CORS em requisições de outros sites
+ * (reforço contra CSRF, além do cookie SameSite=Lax).
  */
 export function route(methods: Partial<Record<string, Handler>>) {
   return async (req: VercelRequest, res: VercelResponse) => {
@@ -24,6 +37,9 @@ export function route(methods: Partial<Record<string, Handler>>) {
     if (!handler) {
       res.setHeader('Allow', Object.keys(methods).join(', '));
       return sendError(res, 405, 'method_not_allowed', 'Método não permitido.');
+    }
+    if (WRITE_METHODS.has(req.method ?? '') && hasBody(req) && !isJson(req)) {
+      return sendError(res, 415, 'validation', 'Envie os dados em JSON.');
     }
     try {
       res.setHeader('Cache-Control', 'no-store');

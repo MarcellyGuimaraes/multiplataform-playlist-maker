@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { addTrackSchema, playlistNameSchema, reorderSchema, updateTrackSchema } from './schemas.js';
+import {
+  addTrackSchema,
+  emailSchema,
+  passwordSchema,
+  playlistNameSchema,
+  reorderSchema,
+  updateTrackSchema,
+} from './schemas.js';
 
 describe('playlistNameSchema', () => {
   it('aceita nome válido e remove espaços nas bordas', () => {
@@ -44,5 +51,35 @@ describe('reorderSchema', () => {
     expect(
       reorderSchema.safeParse({ trackIds: ['3f1c2b8e-9a4d-4c6e-8b2a-1d5e7f9a0b3c'] }).success,
     ).toBe(true);
+  });
+});
+
+describe('emailSchema', () => {
+  it('normaliza espaços nas bordas e maiúsculas', () => {
+    expect(emailSchema.parse('Maria@Exemplo.com ')).toBe('maria@exemplo.com');
+  });
+  it('rejeita formato inválido e vazio', () => {
+    expect(emailSchema.safeParse('maria@').success).toBe(false);
+    expect(emailSchema.safeParse('maria').success).toBe(false);
+    expect(emailSchema.safeParse('   ').success).toBe(false);
+    expect(emailSchema.safeParse(undefined).success).toBe(false);
+  });
+  it('rejeita e-mail acima de 254 caracteres', () => {
+    expect(emailSchema.safeParse(`${'a'.repeat(64)}@${'b'.repeat(186)}.com`).success).toBe(false);
+  });
+});
+
+describe('passwordSchema', () => {
+  it('aceita de 8 a 128 caracteres', () => {
+    expect(passwordSchema.safeParse('1234567').success).toBe(false);
+    expect(passwordSchema.safeParse('12345678').success).toBe(true);
+    expect(passwordSchema.safeParse('a'.repeat(128)).success).toBe(true);
+    expect(passwordSchema.safeParse('a'.repeat(129)).success).toBe(false);
+  });
+  it('não apara espaços da senha', () => {
+    expect(passwordSchema.parse(' segredo1 ')).toBe(' segredo1 ');
+  });
+  it('mensagem de senha curta', () => {
+    expect(passwordSchema.safeParse('1234567').error?.issues[0].message).toBe('A senha deve ter pelo menos 8 caracteres.');
   });
 });

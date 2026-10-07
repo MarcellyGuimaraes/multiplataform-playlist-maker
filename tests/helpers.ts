@@ -39,8 +39,22 @@ export function fakeRes(): FakeRes {
   return res as unknown as FakeRes;
 }
 
-export function fakeReq(init: { method: string; query?: Record<string, string>; body?: unknown }): VercelRequest {
-  return { method: init.method, url: '/api/test', query: init.query ?? {}, body: init.body } as unknown as VercelRequest;
+export type FakeReqInit = {
+  method: string;
+  query?: Record<string, string>;
+  body?: unknown;
+  /** Cabeçalhos explícitos; sem eles, um corpo presente vai como application/json. */
+  headers?: Record<string, string>;
+  /** Valor do cabeçalho Cookie (ex.: `sid=...`). */
+  cookie?: string;
+};
+
+export function fakeReq(init: FakeReqInit): VercelRequest {
+  const headers: Record<string, string> = {
+    ...(init.headers ?? (init.body === undefined ? {} : { 'content-type': 'application/json' })),
+    ...(init.cookie === undefined ? {} : { cookie: init.cookie }),
+  };
+  return { method: init.method, url: '/api/test', query: init.query ?? {}, body: init.body, headers } as unknown as VercelRequest;
 }
 
 export type SqlCall = { text: string; values: unknown[] };
@@ -55,6 +69,29 @@ export function fakeSql(responses: unknown[][] = []) {
     return Promise.resolve(queue.shift());
   };
   return Object.assign(sql, { calls, queue });
+}
+
+/** Par `nome=valor` do Set-Cookie de uma resposta, pronto para reenviar no cabeçalho Cookie. */
+export function cookieFrom(res: FakeRes): string {
+  const header = res.headers['set-cookie'];
+  if (!header) throw new Error('A resposta não enviou Set-Cookie.');
+  return header.split(';')[0];
+}
+
+export type TestUser ={ id: string; email: string };
+
+export const MARIA: TestUser = { id: '11111111-1111-4111-8111-111111111111', email: 'maria@exemplo.com' };
+export const ANA: TestUser = { id: '22222222-2222-4222-8222-222222222222', email: 'ana@exemplo.com' };
+
+/** Cookie de sessão com formato válido; com o fakeSql, quem decide a conta é a resposta enfileirada. */
+export const SESSION_COOKIE = `sid=${'s'.repeat(43)}`;
+
+/**
+ * fakeSql cuja primeira resposta é a consulta de sessão: `user` para uma usuária logada,
+ * null para visitante (sessão inexistente). As demais respostas seguem na ordem.
+ */
+export function fakeSqlAs(user: TestUser | null, ...responses: unknown[][]) {
+  return fakeSql([user ? [user] : [], ...responses]);
 }
 
 export async function call(

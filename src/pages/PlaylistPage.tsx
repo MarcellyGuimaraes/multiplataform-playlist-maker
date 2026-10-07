@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PLAYLIST_NAME_MAX } from '../../shared/limits';
 import { playlistNameSchema } from '../../shared/schemas';
-import type { PlaylistDetail, Track } from '../../shared/types';
+import type { PlaylistDetail, Track, Visibility } from '../../shared/types';
 import { NotFound } from '../App';
-import { ApiError, api, shareUrl } from '../api/client';
+import { ApiError, api, isUnauthorized, shareUrl } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { AddTrackForm } from '../components/AddTrackForm';
 import { PlayerPanel } from '../components/PlayerPanel';
 import { SortableItem, SortableTracks } from '../components/SortableTracks';
@@ -22,15 +23,23 @@ export function PlaylistPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const playback = usePlayback(playlist ? playlist.tracks.map((t) => t.id) : []);
+  const { forget } = useAuth();
+
+  /** Sem sessão (ou sessão expirada): vai para o login e volta para cá depois. */
+  const toLogin = useCallback(() => {
+    forget();
+    navigate(`/entrar?voltar=${encodeURIComponent(`/p/${id}`)}`, { replace: true });
+  }, [forget, navigate, id]);
 
   const load = useCallback(async () => {
     try {
       setPlaylist(await api.getPlaylist(id));
     } catch (e) {
-      if (e instanceof ApiError && e.status === 404) setNotFound(true);
+      if (isUnauthorized(e)) toLogin();
+      else if (e instanceof ApiError && e.status === 404) setNotFound(true);
       else setError(e instanceof Error ? e.message : 'Erro ao carregar a playlist.');
     }
-  }, [id]);
+  }, [id, toLogin]);
 
   useEffect(() => {
     void load();
@@ -43,6 +52,7 @@ export function PlaylistPage() {
     try {
       await action();
     } catch (e) {
+      if (isUnauthorized(e)) return toLogin();
       setError(e instanceof Error ? e.message : 'A operação falhou.');
       await load();
     } finally {
@@ -64,8 +74,18 @@ export function PlaylistPage() {
   const currentIndex = tracks.findIndex((t) => t.id === playback.currentId);
   const current = currentIndex >= 0 ? tracks[currentIndex] : null;
 
+  /** Para ações cujo erro aparece no próprio formulário: 401 ainda leva ao login. */
+  async function orLogin<T>(action: Promise<T>): Promise<T> {
+    try {
+      return await action;
+    } catch (e) {
+      if (isUnauthorized(e)) toLogin();
+      throw e;
+    }
+  }
+
   async function addTrack(url: string, label: string) {
-    const track = await api.addTrack(id, url, label);
+    const track = await orLogin(api.addTrack(id, url, label));
     setPlaylist((p) => (p ? { ...p, tracks: [...p.tracks, track] } : p));
   }
 
@@ -87,7 +107,7 @@ export function PlaylistPage() {
   }
 
   async function saveLabel(index: number, label: string) {
-    const updated = await api.updateTrackLabel(id, tracks[index].id, label);
+    const updated = await orLogin(api.updateTrackLabel(id, tracks[index].id, label));
     setTracks(tracks.map((t) => (t.id === updated.id ? updated : t)));
   }
 
@@ -115,6 +135,12 @@ export function PlaylistPage() {
           mutate(async () => {
             const { shareToken } = await api.regenerateShareToken(id);
             setPlaylist((p) => (p ? { ...p, shareToken } : p));
+          })
+        }
+        onSetVisibility={(visibility) =>
+          mutate(async () => {
+            const updated = await api.setVisibility(id, visibility);
+            setPlaylist((p) => (p ? { ...p, visibility: updated.visibility, shareToken: updated.shareToken } : p));
           })
         }
       />
@@ -155,14 +181,16 @@ type HeaderProps = {
   onRename: (name: string) => Promise<void>;
   onDelete: () => Promise<void>;
   onRegenerate: () => Promise<void>;
+  onSetVisibility: (visibility: Visibility) => Promise<void>;
 };
 
-function PlaylistHeader({ playlist, busy, onRename, onDelete, onRegenerate }: HeaderProps) {
+function PlaylistHeader({ playlist, busy, onRename, onDelete, onRegenerate, onSetVisibility }: HeaderProps) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(playlist.name);
   const [nameError, setNameError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
-  const link = shareUrl(playlist.shareToken);
+  // Só playlist pública tem link; privada não oferece nada para copiar.
+  const link = playlist.visibility === 'public' && playlist.shareToken ? shareUrl(playlist.shareToken) : null;
 
   async function submitRename(e: FormEvent) {
     e.preventDefault();
@@ -176,6 +204,7 @@ function PlaylistHeader({ playlist, busy, onRename, onDelete, onRegenerate }: He
   }
 
   async function copy() {
+    if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
       setCopyStatus('Link copiado!');
@@ -239,29 +268,63 @@ function PlaylistHeader({ playlist, busy, onRename, onDelete, onRegenerate }: He
       )}
 
       <div className="share card">
-        <label className="grow">
-          Link público (somente leitura)
-          <input type="text" readOnly value={link} onFocus={(e) => e.currentTarget.select()} />
-        </label>
-        <button type="button" onClick={copy}>
-          Copiar link público
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={busy}
-          onClick={() => {
-            if (window.confirm('Gerar um novo link público? O link atual deixará de funcionar.')) {
-              setCopyStatus(null);
-              void onRegenerate();
-            }
-          }}
-        >
-          Gerar novo link
-        </button>
-        <p className="hint ok" aria-live="polite">
-          {copyStatus ?? ' '}
+        <p className="grow visibility-status">
+          <span className={`visibility-badge is-${playlist.visibility}`}>
+            {playlist.visibility === 'public' ? 'Pública' : 'Privada'}
+          </span>{' '}
+          <span className="muted">
+            {playlist.visibility === 'public'
+              ? 'Aparece na tela inicial e pode ser aberta por quem tiver o link.'
+              : 'Só você vê esta playlist.'}
+          </span>
         </p>
+        {playlist.visibility === 'public' ? (
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm('Tornar a playlist privada? O link público atual deixará de funcionar.')) {
+                setCopyStatus(null);
+                void onSetVisibility('private');
+              }
+            }}
+          >
+            Tornar privada
+          </button>
+        ) : (
+          <button type="button" disabled={busy} onClick={() => void onSetVisibility('public')}>
+            Tornar pública
+          </button>
+        )}
+
+        {link && (
+          <>
+            <label className="share-link">
+              Link público (somente leitura)
+              <input type="text" readOnly value={link} onFocus={(e) => e.currentTarget.select()} />
+            </label>
+            <button type="button" onClick={copy}>
+              Copiar link público
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm('Gerar um novo link público? O link atual deixará de funcionar.')) {
+                  setCopyStatus(null);
+                  void onRegenerate();
+                }
+              }}
+            >
+              Gerar novo link
+            </button>
+            <p className="hint ok" aria-live="polite">
+              {copyStatus ?? ' '}
+            </p>
+          </>
+        )}
       </div>
     </header>
   );

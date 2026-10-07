@@ -1,13 +1,17 @@
 import { updateTrackSchema } from '../../../../shared/schemas.js';
+import { requireUser } from '../../../_lib/auth.js';
 import { getSql } from '../../../_lib/db.js';
 import { isUuid, notFound, param, parseBody, route } from '../../../_lib/http.js';
 import { toTrack, type TrackRow } from '../../../_lib/rows.js';
 
 const TRACK_NOT_FOUND = 'Faixa não encontrada.';
 
-// Toda operação filtra por playlist_id E id: uma faixa de outra playlist responde "não encontrado".
+// Toda operação filtra por playlist_id E id, e exige que a playlist seja da conta da sessão:
+// uma faixa de outra playlist ou de outra conta responde "não encontrado".
 export default route({
   async PATCH(req, res) {
+    const user = await requireUser(req, res);
+    if (!user) return;
     const id = param(req, 'id');
     const trackId = param(req, 'trackId');
     if (!isUuid(id) || !isUuid(trackId)) return notFound(res, TRACK_NOT_FOUND);
@@ -15,9 +19,10 @@ export default route({
     if (!body) return;
     const sql = getSql();
     const [row] = (await sql`
-      with upd as (
+      with p as (select id from playlists where id = ${id} and owner_id = ${user.id}),
+      upd as (
         update tracks set label = ${body.label}, updated_at = now()
-        where id = ${trackId} and playlist_id = ${id}
+        where id = ${trackId} and playlist_id in (select id from p)
         returning *
       ),
       touch as (update playlists set updated_at = now() where id in (select playlist_id from upd))
@@ -28,6 +33,8 @@ export default route({
   },
 
   async DELETE(req, res) {
+    const user = await requireUser(req, res);
+    if (!user) return;
     const id = param(req, 'id');
     const trackId = param(req, 'trackId');
     if (!isUuid(id) || !isUuid(trackId)) return notFound(res, TRACK_NOT_FOUND);
@@ -35,8 +42,9 @@ export default route({
     // Remove e recompacta as posições (0..n-1) das restantes num único comando atômico.
     // As CTEs enxergam o estado anterior ao delete, por isso a faixa removida é excluída de "ranked".
     const [result] = (await sql`
-      with del as (
-        delete from tracks where id = ${trackId} and playlist_id = ${id} returning id
+      with p as (select id from playlists where id = ${id} and owner_id = ${user.id}),
+      del as (
+        delete from tracks where id = ${trackId} and playlist_id in (select id from p) returning id
       ),
       ranked as (
         select id, (row_number() over (order by position, created_at) - 1)::int as pos

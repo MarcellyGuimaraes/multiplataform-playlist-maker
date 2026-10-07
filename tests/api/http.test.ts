@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { isUuid, newShareToken, parseBody, route } from '../../api/_lib/http.js';
-import { call, fakeReq, fakeRes } from '../helpers.js';
+import { call, fakeReq, fakeRes, type FakeReqInit } from '../helpers.js';
 
 describe('route', () => {
   it('despacha pelo método', async () => {
@@ -17,6 +17,30 @@ describe('route', () => {
     expect(res.statusCode).toBe(405);
     expect(res.headers.allow).toBe('GET, POST');
     expect(res.body).toEqual({ error: { code: 'method_not_allowed', message: expect.any(String) } });
+  });
+
+  it('rejeita escrita com corpo que não é JSON sem chamar o handler', async () => {
+    const handler = vi.fn();
+    const r = route({ POST: handler, PUT: handler, PATCH: handler, DELETE: handler, GET: handler });
+    const cases: FakeReqInit[] = [
+      { method: 'POST', body: 'name=x', headers: { 'content-type': 'application/x-www-form-urlencoded' } },
+      { method: 'PUT', body: '{"a":1}', headers: { 'content-type': 'text/plain' } },
+      { method: 'PATCH', body: { name: 'x' }, headers: {} },
+      { method: 'DELETE', headers: { 'content-type': 'multipart/form-data', 'content-length': '12' } },
+      { method: 'POST', headers: { 'content-type': 'application/jsonp', 'content-length': '2' } },
+    ];
+    for (const init of cases) {
+      const res = await call(r, init);
+      expect(res.statusCode).toBe(415);
+      expect(res.body).toMatchObject({ error: { code: 'validation' } });
+    }
+    expect(handler).not.toHaveBeenCalled();
+
+    // JSON (com charset), escrita sem corpo e leitura passam
+    await call(r, { method: 'POST', body: { a: 1 }, headers: { 'content-type': 'application/json; charset=utf-8' } });
+    await call(r, { method: 'POST' });
+    await call(r, { method: 'GET', headers: { 'content-type': 'text/plain' } });
+    expect(handler).toHaveBeenCalledTimes(3);
   });
 
   it('converte exceção em 500 genérico sem vazar detalhes', async () => {

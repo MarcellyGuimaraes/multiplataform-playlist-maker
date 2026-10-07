@@ -7,18 +7,17 @@ const SHARE_TOKEN = /^[A-Za-z0-9_-]{22}$/;
 const NOT_FOUND = 'Playlist não encontrada.';
 
 /**
- * Leitura pública por token. A resposta não inclui o id interno da playlist nem ids de faixas,
- * então não serve para chamar nenhuma rota de escrita.
+ * Leitura pública por token, só de playlists públicas. A resposta não inclui o id interno da playlist,
+ * ids de faixas nem dados da dona, então não serve para chamar nenhuma rota de escrita.
  */
 export default route({
   async GET(req, res) {
     const token = param(req, 'token');
     if (!token || !SHARE_TOKEN.test(token)) return notFound(res, NOT_FOUND);
     const sql = getSql();
-    const [playlist] = (await sql`select id, name from playlists where share_token = ${token}`) as {
-      id: string;
-      name: string;
-    }[];
+    const [playlist] = (await sql`
+      select id, name from playlists where share_token = ${token} and visibility = 'public'
+    `) as { id: string; name: string }[];
     if (!playlist) return notFound(res, NOT_FOUND);
     const tracks = (await sql`
       select * from tracks where playlist_id = ${playlist.id} order by position, created_at

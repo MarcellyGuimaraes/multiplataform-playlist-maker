@@ -72,8 +72,11 @@ export const api = {
 
   addTrack: (playlistId: string, url: string, label: string) =>
     request<Track>('POST', `/playlists/${enc(playlistId)}/tracks`, { url, label }),
+  /** Edita rótulo e/ou versão no YouTube (link para cadastrar ou trocar, null para remover). */
+  updateTrack: (playlistId: string, trackId: string, patch: { label?: string; youtubeAlt?: string | null }) =>
+    request<Track>('PATCH', `/playlists/${enc(playlistId)}/tracks/${enc(trackId)}`, patch),
   updateTrackLabel: (playlistId: string, trackId: string, label: string) =>
-    request<Track>('PATCH', `/playlists/${enc(playlistId)}/tracks/${enc(trackId)}`, { label }),
+    api.updateTrack(playlistId, trackId, { label }),
   deleteTrack: (playlistId: string, trackId: string) =>
     request<void>('DELETE', `/playlists/${enc(playlistId)}/tracks/${enc(trackId)}`),
   reorderTracks: (playlistId: string, trackIds: string[]) =>

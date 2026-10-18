@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { TRACK_LABEL_MAX } from '../../shared/limits';
+import { TRACK_LABEL_MAX, TRACK_URL_MAX } from '../../shared/limits';
 import type { SharedTrack } from '../../shared/types';
 import { displayDetails, displayName } from '../embed';
 import { PlatformBadge } from './PlatformBadge';
@@ -8,6 +8,8 @@ export type TrackEditActions = {
   onMove: (from: number, to: number) => void;
   onDelete: (index: number) => void;
   onSaveLabel: (index: number, label: string) => Promise<void>;
+  /** Cadastra ou troca (link) ou remove (null) a versão no YouTube de uma faixa do Spotify. */
+  onSaveYoutubeAlt: (index: number, url: string | null) => Promise<void>;
 };
 
 type Props<T extends SharedTrack> = {
@@ -138,6 +140,14 @@ function TrackItem({ track, index, total, playing, onPlay, edit, busy }: ItemPro
             link original
           </a>
         </p>
+        {edit && track.platform === 'spotify' && (
+          <YoutubeAlt
+            altId={track.youtubeAltId}
+            name={name}
+            busy={busy}
+            onSave={(url) => edit.onSaveYoutubeAlt(index, url)}
+          />
+        )}
       </div>
       <div className="track-actions">
         <button
@@ -193,6 +203,99 @@ function TrackItem({ track, index, total, playing, onPlay, edit, busy }: ItemPro
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+type YoutubeAltProps = {
+  altId: string | null;
+  name: string;
+  busy?: boolean;
+  onSave: (url: string | null) => Promise<void>;
+};
+
+/** Versão no YouTube de uma faixa do Spotify, colada pela dona: cadastrar, trocar e remover. */
+function YoutubeAlt({ altId, name, busy, onSave }: YoutubeAltProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const videoUrl = altId ? `https://www.youtube.com/watch?v=${altId}` : null;
+
+  async function save(url: string | null) {
+    setError(null);
+    try {
+      await onSave(url);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não foi possível salvar a versão no YouTube.');
+    }
+  }
+
+  if (editing) {
+    return (
+      <form
+        className="inline-form track-alt"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save(draft);
+        }}
+      >
+        <input
+          aria-label="Link do vídeo no YouTube"
+          placeholder="https://youtu.be/…"
+          value={draft}
+          maxLength={TRACK_URL_MAX}
+          onChange={(e) => setDraft(e.target.value)}
+          autoFocus
+        />
+        <button type="submit" disabled={busy} aria-label="Salvar versão no YouTube">
+          Salvar
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => {
+            setEditing(false);
+            setError(null);
+          }}
+        >
+          Cancelar
+        </button>
+        {error && <p className="error">{error}</p>}
+      </form>
+    );
+  }
+
+  const startEditing = () => {
+    setDraft(videoUrl ?? '');
+    setEditing(true);
+  };
+  return (
+    <div className="track-alt">
+      {videoUrl ? (
+        <>
+          <a href={videoUrl} target="_blank" rel="noopener noreferrer">
+            Versão no YouTube
+          </a>
+          <button type="button" className="link-button" onClick={startEditing} aria-label={`Trocar versão no YouTube: ${name}`}>
+            Trocar
+          </button>
+          <button
+            type="button"
+            className="link-button"
+            disabled={busy}
+            onClick={() => void save(null)}
+            aria-label={`Remover versão no YouTube: ${name}`}
+          >
+            Remover
+          </button>
+        </>
+      ) : (
+        <button type="button" className="link-button" onClick={startEditing} aria-label={`Versão no YouTube: ${name}`}>
+          Versão no YouTube
+        </button>
+      )}
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }

@@ -14,7 +14,7 @@ App para montar playlists que misturam faixas do **YouTube**, **Spotify** e **So
 
 O banco guarda apenas **referências** às faixas (link, plataforma, identificador, rótulo e metadados textuais). A reprodução acontece no navegador, pelos **players embutidos oficiais** de cada plataforma. O servidor nunca hospeda, baixa, armazena ou redistribui áudio — as únicas chamadas dele às plataformas são consultas oEmbed públicas (título/autor/thumbnail) e a resolução de redirecionamento de links curtos `on.soundcloud.com`.
 
-> **Spotify:** o embed só toca a faixa completa para quem tem login feito no Spotify no navegador; sem login, toca uma prévia de 30 segundos. Isso é regra da plataforma e não é contornado. Veja em "Limitações" como cada navegador se comporta.
+> **Spotify:** o embed só toca a faixa completa para quem tem login feito no Spotify no navegador; sem login, toca uma prévia de 30 segundos. Isso é regra da plataforma e não é contornado. Para quem ouve nesses casos, a dona pode cadastrar uma **versão no YouTube** da faixa (veja abaixo). Veja em "Limitações" como cada navegador se comporta.
 
 ## Stack
 
@@ -30,6 +30,16 @@ Ao terminar uma faixa, o app carrega e toca a próxima sozinho, inclusive quando
 - **Controles no player:** anterior, próxima, **Autoplay** (ligado por padrão), **Repetir** (ao fim da última faixa, volta à primeira) e **Aleatório** (cada faixa toca uma vez por ciclo; a ordem salva da playlist não muda). As preferências ficam só no navegador de quem ouve (`localStorage`, chave `playback-prefs:v1`).
 - **Como funciona:** YouTube e SoundCloud são controlados pelas APIs oficiais de player, carregadas no navegador sob demanda — [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference) e [SoundCloud Widget API](https://developers.soundcloud.com/docs/api/html5-widget). O Spotify usa o mesmo iframe de embed do MVP, controlado pelas mensagens que o próprio embed troca com a página (o protocolo que a [Spotify iFrame API](https://developer.spotify.com/documentation/embeds/references/iframe-api) usa por baixo). Não usamos o script da iFrame API porque o iframe criado por ela tocava só a prévia de 30 s mesmo com login. Código em `src/player/` (fila em `queue.ts`, estado em `usePlayback.ts`, adaptadores em `adapters/`). O servidor não participa da reprodução.
 - A primeira faixa sempre começa por um clique em **Tocar**: abrir uma playlist não toca nada sozinho.
+
+### Versão no YouTube de faixas do Spotify
+
+Para que uma faixa do Spotify toque completa em qualquer navegador, sem login, a dona pode indicar um vídeo do YouTube com a mesma música:
+
+- **Cadastrar:** na tela de edição, cada faixa do Spotify tem o botão **Versão no YouTube**. Cole o link do vídeo (`youtu.be/…`, `youtube.com/watch?v=…`, `shorts/…`) e salve. Depois, a faixa mostra o link **Versão no YouTube** com **Trocar** e **Remover**. Só vídeos do YouTube são aceitos (não playlists nem outras plataformas), e só faixas do Spotify têm versão alternativa. O app não procura vídeos sozinho: a escolha é da dona.
+- **Troca automática:** quando o embed do Spotify informa que está tocando a prévia e a faixa tem versão no YouTube, o player passa sozinho para o YouTube com esse vídeo, na mesma posição da fila. O fim do vídeo avança a fila normalmente. O mesmo vale no link público.
+- **Faixas seguintes:** depois de uma prévia detectada, as próximas faixas do Spotify com versão no YouTube começam direto pelo YouTube enquanto a página estiver aberta. Isso é desfeito por **Voltar ao Spotify** ou quando o Spotify toca uma faixa completa.
+- **Voltar ao Spotify:** enquanto a versão do YouTube toca, o player mostra "Tocando pelo YouTube" com o botão **Voltar ao Spotify**, que monta de novo o embed do Spotify na mesma faixa sem trocar de novo nela. Serve, por exemplo, para quem está no Firefox e quer clicar no player do Spotify para liberar o login.
+- **Sem versão no YouTube**, a prévia toca e aparece o aviso do navegador (abaixo). Na tela de edição, o aviso sugere à dona cadastrar uma versão.
 
 **Limitações:**
 
@@ -60,7 +70,9 @@ Ao terminar uma faixa, o app carrega e toca a próxima sozinho, inclusive quando
    npm run db:migrate
    ```
 
-   A saída deve listar `Aplicada: 001_init.sql` e `Aplicada: 002_auth_visibility.sql`. Rodar de novo imprime `Nenhuma migração pendente.`
+   A saída deve listar `Aplicada: 001_init.sql`, `Aplicada: 002_auth_visibility.sql` e `Aplicada: 003_youtube_alternative.sql`. Rodar de novo imprime `Nenhuma migração pendente.`
+
+   A `003_youtube_alternative.sql` só adiciona a coluna `youtube_alt_id` em `tracks` (versão no YouTube das faixas do Spotify): não mexe nos dados e o código anterior a ignora. Em bancos que já tinham a `002`, `npm run db:migrate` aplica só a `003`.
 
 > A `DATABASE_URL` é segredo de servidor. **Nunca** use o prefixo `VITE_` nela — variáveis com esse prefixo são embutidas no JavaScript entregue ao navegador.
 
@@ -123,9 +135,9 @@ npm test
 1. Crie um projeto na Vercel importando este repositório (framework: Vite; `vercel.json` já define build e rotas).
 2. Em **Settings → Environment Variables**, adicione `DATABASE_URL`, `SMTP_USER`, `SMTP_APP_PASSWORD` e `APP_URL` para *Production* e *Preview* (em *Preview*, `APP_URL` deve apontar para o endereço do preview, ou os links de redefinição levarão à produção).
 3. Faça o deploy. As rotas `/p/:id`, `/s/:token`, `/entrar`, `/cadastro`, `/esqueci-senha` e `/redefinir-senha` são servidas pela SPA; `/api/*` são as funções.
-4. Aplique as migrações (`npm run db:migrate`). Lembre que a `002` apaga as playlists existentes — faça backup ou um branch do Neon antes.
+4. Aplique as migrações (`npm run db:migrate`) no banco de produção antes do deploy. Lembre que a `002` apaga as playlists existentes — faça backup ou um branch do Neon antes. A `003` é aditiva.
 
-Rollback: promova o deploy anterior no painel da Vercel. **Depois da migração 002 isso não basta**: o código anterior não funciona com o schema novo (`owner_id` obrigatório), então voltar exige restaurar o backup feito antes da migração.
+Rollback: promova o deploy anterior no painel da Vercel. A coluna da `003` pode ficar (o código anterior a ignora) ou ser removida com `alter table tracks drop column youtube_alt_id`. **Depois da migração 002 isso não basta**: o código anterior não funciona com o schema novo (`owner_id` obrigatório), então voltar exige restaurar o backup feito antes da migração.
 
 ## API
 
@@ -145,7 +157,7 @@ Rollback: promova o deploy anterior no painel da Vercel. **Depois da migração 
 | PUT | `/api/playlists/:id/visibility` | `{ visibility: 'public' \| 'private' }` (só a dona) |
 | POST | `/api/playlists/:id/share-token` | gera novo link público (só a dona; 409 se privada) |
 | POST | `/api/playlists/:id/tracks` | adiciona `{ url, label? }` (só a dona) |
-| PATCH | `/api/playlists/:id/tracks/:trackId` | edita `{ label }` (só a dona) |
+| PATCH | `/api/playlists/:id/tracks/:trackId` | edita `{ label?, youtubeAlt? }` (ao menos um; `youtubeAlt`: link de vídeo do YouTube, ou `null` para remover; só em faixas do Spotify) (só a dona) |
 | DELETE | `/api/playlists/:id/tracks/:trackId` | remove (só a dona) |
 | PUT | `/api/playlists/:id/tracks/order` | reordena `{ trackIds }` (só a dona; conjunto exato, senão 409) |
 | GET | `/api/shared/:token` | leitura pública de playlist pública (sem ids internos nem dona) |

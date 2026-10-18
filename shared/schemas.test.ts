@@ -43,6 +43,22 @@ describe('updateTrackSchema', () => {
   it('permite limpar o rótulo', () => {
     expect(updateTrackSchema.parse({ label: '  ' })).toEqual({ label: '' });
   });
+  it('aceita só a versão no YouTube, com espaços nas bordas removidos, ou null para remover', () => {
+    expect(updateTrackSchema.parse({ youtubeAlt: ' https://youtu.be/dQw4w9WgXcQ ' })).toEqual({
+      youtubeAlt: 'https://youtu.be/dQw4w9WgXcQ',
+    });
+    expect(updateTrackSchema.parse({ youtubeAlt: null })).toEqual({ youtubeAlt: null });
+  });
+  it('aceita rótulo e versão juntos', () => {
+    expect(updateTrackSchema.parse({ label: 'a', youtubeAlt: null })).toEqual({ label: 'a', youtubeAlt: null });
+  });
+  it('exige ao menos um campo', () => {
+    expect(updateTrackSchema.safeParse({}).success).toBe(false);
+  });
+  it('rejeita versão vazia ou que não é texto', () => {
+    expect(updateTrackSchema.safeParse({ youtubeAlt: '  ' }).success).toBe(false);
+    expect(updateTrackSchema.safeParse({ youtubeAlt: 42 }).success).toBe(false);
+  });
 });
 
 describe('reorderSchema', () => {

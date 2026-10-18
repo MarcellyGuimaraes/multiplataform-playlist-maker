@@ -230,6 +230,108 @@ describe('usePlayback: prévia do Spotify', () => {
   });
 });
 
+describe('usePlayback: troca para a versão no YouTube', () => {
+  // 'a' e 'c' têm versão no YouTube; 'b' não.
+  const alts: Record<string, string | null> = { a: 'aaaaaaaaaaa', b: null, c: 'ccccccccccc' };
+  const setupAlt = (prefs?: object) => {
+    if (prefs) localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    return renderHook(() => usePlayback(ids, { rng: seededRng(5), youtubeAltFor: (id) => alts[id] }));
+  };
+
+  it('começa pelo Spotify; prévia com alternativa troca a fonte e pede de novo a mesma faixa', () => {
+    const { result } = setupAlt();
+    act(() => result.current.play('a'));
+    const first = result.current.request!;
+    expect(first.source).toBe('spotify');
+    act(() => result.current.events.onPreview?.(true));
+    expect(result.current.request).toMatchObject({ id: 'a', autoplay: true, source: 'youtube' });
+    expect(result.current.request!.nonce).not.toBe(first.nonce);
+    expect(result.current.currentId).toBe('a');
+    expect(result.current.preview).toBe(false);
+    expect(result.current.status).toBe('loading');
+  });
+
+  it('prévia sem alternativa não troca: só liga o aviso', () => {
+    const { result } = setupAlt();
+    act(() => result.current.play('b'));
+    const before = result.current.request;
+    act(() => result.current.events.onPreview?.(true));
+    expect(result.current.request).toBe(before);
+    expect(result.current.preview).toBe(true);
+  });
+
+  it('depois de uma prévia, a faixa seguinte com alternativa já começa pelo YouTube', () => {
+    const { result } = setupAlt();
+    act(() => result.current.play('b'));
+    act(() => result.current.events.onPreview?.(true)); // prévia sem alternativa também conta
+    act(() => result.current.play('c'));
+    expect(result.current.request).toMatchObject({ id: 'c', source: 'youtube' });
+    act(() => result.current.next()); // sem próxima: fica em 'c'
+    act(() => result.current.play('b'));
+    expect(result.current.request).toMatchObject({ id: 'b', source: 'spotify' });
+  });
+
+  it('faixa completa no Spotify desliga a preferência', () => {
+    const { result } = setupAlt();
+    act(() => result.current.play('b'));
+    act(() => result.current.events.onPreview?.(true));
+    act(() => result.current.events.onPreview?.(false));
+    act(() => result.current.play('a'));
+    expect(result.current.request?.source).toBe('spotify');
+  });
+
+  it('voltar ao Spotify desliga a preferência e, nessa faixa, nova prévia não troca', () => {
+    const { result } = setupAlt();
+    act(() => result.current.play('a'));
+    act(() => result.current.events.onPreview?.(true));
+    expect(result.current.request?.source).toBe('youtube');
+    const yt = result.current.request!;
+    act(() => result.current.backToSpotify());
+    expect(result.current.request).toMatchObject({ id: 'a', source: 'spotify' });
+    expect(result.current.request!.nonce).not.toBe(yt.nonce);
+    const back = result.current.request;
+    act(() => result.current.events.onPreview?.(true));
+    expect(result.current.request).toBe(back);
+    expect(result.current.preview).toBe(true);
+    // tocar de novo a mesma faixa mantém a escolha
+    act(() => result.current.play('a'));
+    act(() => result.current.events.onPreview?.(true));
+    expect(result.current.request?.source).toBe('spotify');
+    // a preferência foi desligada: a próxima faixa com alternativa começa pelo Spotify
+    act(() => result.current.play('c'));
+    expect(result.current.request?.source).toBe('spotify');
+    // e em outra faixa a troca volta a valer
+    act(() => result.current.events.onPreview?.(true));
+    expect(result.current.request).toMatchObject({ id: 'c', source: 'youtube' });
+  });
+
+  it('fim do vídeo alternativo avança; erro pula como antes', () => {
+    vi.useFakeTimers();
+    const { result } = setupAlt();
+    act(() => result.current.play('a'));
+    act(() => result.current.events.onPreview?.(true));
+    act(() => result.current.events.onPlaying());
+    act(() => result.current.events.onEnded());
+    expect(result.current.currentId).toBe('b');
+
+    act(() => result.current.play('c'));
+    expect(result.current.request?.source).toBe('youtube');
+    act(() => result.current.events.onError('unavailable'));
+    expect(result.current.status).toBe('unavailable');
+    act(() => vi.advanceTimersByTime(SKIP_UNAVAILABLE_MS));
+    expect(result.current.status).toBe('ended'); // 'c' é a última
+  });
+
+  it('a troca arma o detector de bloqueio', () => {
+    vi.useFakeTimers();
+    const { result } = setupAlt();
+    act(() => result.current.play('a'));
+    act(() => result.current.events.onPreview?.(true));
+    act(() => vi.advanceTimersByTime(BLOCKED_TIMEOUT_MS));
+    expect(result.current.status).toBe('blocked');
+  });
+});
+
 describe('usePlayback: lista muda durante a reprodução (3.3)', () => {
   it('reordenar altera a próxima', () => {
     const { result, rerender } = setup();

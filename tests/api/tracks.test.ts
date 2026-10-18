@@ -68,6 +68,7 @@ describe('POST /api/playlists/[id]/tracks', () => {
       title: 'Título oEmbed',
       artist: 'Autor',
       thumbnailUrl: 'https://img.example/t.jpg',
+      youtubeAltId: null,
     });
   });
 
@@ -179,6 +180,89 @@ describe('PATCH/DELETE /api/playlists/[id]/tracks/[trackId]', () => {
     const res = await callAs(trackById, { method: 'DELETE', query: { id: p.id, trackId: MISSING } });
     expect(res.statusCode).toBe(404);
     expect(order(await detail(p.id))).toEqual([[0, 'a']]);
+  });
+});
+
+describe('PATCH /api/playlists/[id]/tracks/[trackId]: versão no YouTube', () => {
+  const patch = (playlistId: string, trackId: string, body: unknown) =>
+    callAs(trackById, { method: 'PATCH', query: { id: playlistId, trackId }, body });
+  async function spotifyTrack(label = 'original') {
+    const p = await newPlaylist();
+    const t = (await add(p.id, SP, label)).body as Track;
+    return { p, t };
+  }
+
+  it.each([
+    ['youtu.be', 'https://youtu.be/dQw4w9WgXcQ'],
+    ['youtube.com/watch', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10s'],
+  ])('cadastra com link %s guardando só o id, sem mexer no resto', async (_name, url) => {
+    const { p, t } = await spotifyTrack();
+    const res = await patch(p.id, t.id, { youtubeAlt: url });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ ...t, youtubeAltId: 'dQw4w9WgXcQ' });
+    expect((await detail(p.id)).tracks[0]).toEqual({ ...t, youtubeAltId: 'dQw4w9WgXcQ' });
+  });
+
+  it('troca e depois remove com null', async () => {
+    const { p, t } = await spotifyTrack();
+    await patch(p.id, t.id, { youtubeAlt: 'https://youtu.be/dQw4w9WgXcQ' });
+    const swapped = await patch(p.id, t.id, { youtubeAlt: 'https://youtu.be/aaaaaaaaaaa' });
+    expect(swapped.body).toMatchObject({ youtubeAltId: 'aaaaaaaaaaa', label: 'original' });
+    const removed = await patch(p.id, t.id, { youtubeAlt: null });
+    expect(removed.statusCode).toBe(200);
+    expect(removed.body).toEqual({ ...t, youtubeAltId: null });
+  });
+
+  it('editar o rótulo mantém a versão, e mexer na versão mantém o rótulo', async () => {
+    const { p, t } = await spotifyTrack();
+    await patch(p.id, t.id, { youtubeAlt: 'https://youtu.be/dQw4w9WgXcQ' });
+    const relabeled = await patch(p.id, t.id, { label: 'novo' });
+    expect(relabeled.body).toMatchObject({ label: 'novo', youtubeAltId: 'dQw4w9WgXcQ' });
+    const both = await patch(p.id, t.id, { label: 'outro', youtubeAlt: null });
+    expect(both.body).toMatchObject({ label: 'outro', youtubeAltId: null });
+  });
+
+  it.each([
+    ['link do SoundCloud', SC],
+    ['playlist do YouTube', 'https://www.youtube.com/playlist?list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG'],
+    ['link do Spotify', SP],
+    ['texto', 'não é link'],
+  ])('rejeita %s com 400 e nada muda', async (_name, url) => {
+    const { p, t } = await spotifyTrack();
+    const res = await patch(p.id, t.id, { youtubeAlt: url });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ error: { code: 'validation', message: 'Cole o link de um vídeo do YouTube.' } });
+    expect((await detail(p.id)).tracks[0]).toEqual(t);
+  });
+
+  it.each([
+    ['YouTube', YT],
+    ['SoundCloud', SC],
+  ])('faixa do %s não aceita versão alternativa (400)', async (_name, url) => {
+    const p = await newPlaylist();
+    const t = (await add(p.id, url)).body as Track;
+    const res = await patch(p.id, t.id, { youtubeAlt: 'https://youtu.be/dQw4w9WgXcQ' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ error: { message: 'Só faixas do Spotify aceitam versão no YouTube.' } });
+    expect((await detail(p.id)).tracks[0]).toEqual(t);
+  });
+
+  it('o banco recusa versão alternativa em faixa que não é do Spotify', async () => {
+    const p = await newPlaylist();
+    await add(p.id, YT);
+    await expect(testDb.sql`update tracks set youtube_alt_id = 'dQw4w9WgXcQ'`).rejects.toThrow(
+      /tracks_youtube_alt_only_spotify/,
+    );
+  });
+
+  it('corpo sem nenhum campo responde 400', async () => {
+    const { p, t } = await spotifyTrack();
+    expect((await patch(p.id, t.id, {})).statusCode).toBe(400);
+  });
+
+  it('faixa inexistente responde 404', async () => {
+    const p = await newPlaylist();
+    expect((await patch(p.id, MISSING, { youtubeAlt: 'https://youtu.be/dQw4w9WgXcQ' })).statusCode).toBe(404);
   });
 });
 

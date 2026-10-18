@@ -244,6 +244,60 @@ describe('edição de playlist (8.3, 9.x)', () => {
   });
 });
 
+describe('versão no YouTube de faixa do Spotify', () => {
+  it('cadastrar, ver o link, trocar, remover e erro de validação; nada em faixa do YouTube nem no link público', async () => {
+    await createPlaylist('Alternativas');
+    await addTrack('https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC', 'Spotify');
+    await addTrack('https://youtu.be/dQw4w9WgXcQ', 'YouTube');
+    expect(screen.queryByRole('button', { name: 'Versão no YouTube: YouTube' })).toBeNull();
+
+    // erro de validação aparece embaixo do campo e nada é salvo
+    fireEvent.click(screen.getByRole('button', { name: 'Versão no YouTube: Spotify' }));
+    type(screen.getByLabelText('Link do vídeo no YouTube'), 'https://soundcloud.com/artista/faixa');
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar versão no YouTube' }));
+    expect(await screen.findByText('Cole o link de um vídeo do YouTube.')).toBeTruthy();
+
+    // cadastrar
+    type(screen.getByLabelText('Link do vídeo no YouTube'), 'https://youtu.be/aaaaaaaaaaa');
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar versão no YouTube' }));
+    const link = await screen.findByRole('link', { name: 'Versão no YouTube' });
+    expect(link.getAttribute('href')).toBe('https://www.youtube.com/watch?v=aaaaaaaaaaa');
+    expect(trackNames()).toEqual(['Spotify', 'YouTube']);
+
+    // trocar
+    fireEvent.click(screen.getByRole('button', { name: 'Trocar versão no YouTube: Spotify' }));
+    type(screen.getByLabelText('Link do vídeo no YouTube'), 'https://www.youtube.com/watch?v=bbbbbbbbbbb');
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar versão no YouTube' }));
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Versão no YouTube' }).getAttribute('href')).toBe(
+        'https://www.youtube.com/watch?v=bbbbbbbbbbb',
+      ),
+    );
+
+    // o link público não mostra nenhum controle da versão
+    const sharePath = new URL((await publish()).value).pathname;
+    const session = cookieJar;
+    cookieJar = '';
+    cleanup();
+    open(sharePath);
+    await screen.findByRole('heading', { name: 'Alternativas' });
+    expect(screen.queryByText('Versão no YouTube')).toBeNull();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Tocar', 'Tocar']);
+
+    // remover
+    cookieJar = session;
+    cleanup();
+    const [{ id }] = (await testDb.sql`select id from playlists`) as { id: string }[];
+    open(`/p/${id}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Remover versão no YouTube: Spotify' }));
+    await screen.findByRole('button', { name: 'Versão no YouTube: Spotify' });
+    expect(screen.queryByRole('link', { name: 'Versão no YouTube' })).toBeNull();
+    expect(await testDb.sql`select youtube_alt_id from tracks where platform = 'spotify'`).toEqual([
+      { youtube_alt_id: null },
+    ]);
+  });
+});
+
 describe('visualização compartilhada (10.3)', () => {
   it('somente leitura, com player; token antigo vira "não encontrada"', async () => {
     await createPlaylist('Pública');
@@ -372,5 +426,75 @@ describe('reprodução contínua (5.x)', () => {
     act(() => fake.events().onEnded());
     expect(fake.loads()).toHaveLength(1);
     expect(playing()).toEqual(['Um']);
+  });
+});
+
+describe('troca para a versão no YouTube', () => {
+  const lastLoad = () => fake.loads().at(-1);
+  const SUGGESTION = /cadastre uma versão no YouTube/;
+
+  async function playlistWithAlternatives() {
+    await createPlaylist('Com versões');
+    await addTrack('https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC', 'Com versão');
+    await addTrack('https://open.spotify.com/track/1DFixLWuPkv3KT3TnV35m3', 'Sem versão');
+    await addTrack('https://open.spotify.com/track/2DFixLWuPkv3KT3TnV35m3', 'Outra com versão');
+    for (const [name, url] of [
+      ['Com versão', 'https://youtu.be/aaaaaaaaaaa'],
+      ['Outra com versão', 'https://youtu.be/ccccccccccc'],
+    ]) {
+      fireEvent.click(screen.getByRole('button', { name: `Versão no YouTube: ${name}` }));
+      type(screen.getByLabelText('Link do vídeo no YouTube'), url);
+      fireEvent.click(screen.getByRole('button', { name: 'Salvar versão no YouTube' }));
+      await screen.findByRole('button', { name: `Trocar versão no YouTube: ${name}` });
+    }
+  }
+
+  it('prévia troca para o YouTube, fim avança, próxima com versão já começa pelo YouTube, voltar ao Spotify', async () => {
+    await playlistWithAlternatives();
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar: Com versão' }));
+    await waitFor(() => expect(lastLoad()).toMatchObject({ platform: 'spotify', id: '4uLU6hMCjMI75M1A2tKUQC' }));
+    act(() => fake.events().onPreview?.(true));
+    await waitFor(() => expect(lastLoad()).toMatchObject({ platform: 'youtube', id: 'aaaaaaaaaaa' }));
+    const player = screen.getByRole('region', { name: 'Tocando agora' });
+    expect(within(player).getByText(/Tocando pelo YouTube/)).toBeTruthy();
+    expect(within(player).getByRole('link', { name: /Abrir no Spotify/ })).toBeTruthy();
+
+    // fim do vídeo avança para a faixa sem versão, que toca a prévia com a sugestão para a dona
+    act(() => fake.events().onEnded());
+    await waitFor(() => expect(lastLoad()).toMatchObject({ platform: 'spotify', id: '1DFixLWuPkv3KT3TnV35m3' }));
+    act(() => fake.events().onPreview?.(true));
+    expect(await screen.findByText(SUGGESTION)).toBeTruthy();
+
+    // a próxima com versão começa direto pelo YouTube
+    act(() => fake.events().onEnded());
+    await waitFor(() => expect(lastLoad()).toMatchObject({ platform: 'youtube', id: 'ccccccccccc' }));
+
+    // voltar ao Spotify: embed do Spotify na mesma faixa, e a prévia não troca de novo
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar ao Spotify' }));
+    await waitFor(() => expect(lastLoad()).toMatchObject({ platform: 'spotify', id: '2DFixLWuPkv3KT3TnV35m3' }));
+    const loads = fake.loads().length;
+    act(() => fake.events().onPreview?.(true));
+    await screen.findByText(/Tocando a prévia|prévia de 30 segundos no player|Firefox esconde/);
+    expect(screen.queryByText(SUGGESTION)).toBeNull(); // a faixa já tem versão
+    expect(fake.loads()).toHaveLength(loads);
+    expect(screen.queryByText(/Tocando pelo YouTube/)).toBeNull();
+  });
+
+  it('o link público faz a mesma troca, sem a sugestão para a dona', async () => {
+    await playlistWithAlternatives();
+    const sharePath = new URL((await publish()).value).pathname;
+    cookieJar = '';
+    cleanup();
+    fake = createFakeFactories();
+    open(sharePath);
+    await screen.findByRole('heading', { name: 'Com versões' });
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar: Sem versão' }));
+    await waitFor(() => expect(lastLoad()?.platform).toBe('spotify'));
+    act(() => fake.events().onPreview?.(true));
+    await screen.findByText(/Tocando a prévia|prévia de 30 segundos no player|Firefox esconde/);
+    expect(screen.queryByText(SUGGESTION)).toBeNull();
+    act(() => fake.events().onEnded());
+    await waitFor(() => expect(lastLoad()).toMatchObject({ platform: 'youtube', id: 'ccccccccccc' }));
+    expect(screen.getByText(/Tocando pelo YouTube/)).toBeTruthy();
   });
 });

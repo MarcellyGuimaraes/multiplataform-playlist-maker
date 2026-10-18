@@ -3,7 +3,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { getSql } from '../../api/_lib/db.js';
 import playlists from '../../api/playlists/index.js';
 import playlistById from '../../api/playlists/[id]/index.js';
-import type { PlaylistDetail } from '../../shared/types.js';
+import addTrack from '../../api/playlists/[id]/tracks/index.js';
+import trackById from '../../api/playlists/[id]/tracks/[trackId].js';
+import type { PlaylistDetail, Track } from '../../shared/types.js';
 import { call } from '../helpers.js';
 import { createTestDb, signupAs } from '../pgdb.js';
 
@@ -102,5 +104,32 @@ describe('GET /api/playlists com duas contas', () => {
     const visitor = (await call(playlists, { method: 'GET' })).body as List;
     expect(visitor.mine).toEqual([]);
     expect(visitor.public.map((p) => p.name).sort()).toEqual(['Ana pública', 'Maria pública']);
+  });
+});
+
+describe('versão no YouTube com duas contas', () => {
+  it('outra conta recebe 404 ao cadastrar ou remover versão numa faixa de Maria, e nada muda', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ title: 'T' })));
+    const p = await create(maria, 'De Maria');
+    const t = (
+      await call(addTrack, {
+        method: 'POST',
+        query: { id: p.id },
+        body: { url: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC' },
+        cookie: maria,
+      })
+    ).body as Track;
+    const results = [
+      await call(trackById, {
+        method: 'PATCH',
+        query: { id: p.id, trackId: t.id },
+        body: { youtubeAlt: 'https://youtu.be/dQw4w9WgXcQ' },
+        cookie: ana,
+      }),
+      await call(trackById, { method: 'PATCH', query: { id: p.id, trackId: t.id }, body: { youtubeAlt: null }, cookie: ana }),
+    ];
+    expect(results.map((r) => r.statusCode)).toEqual([404, 404]);
+    expect(await testDb.sql`select youtube_alt_id from tracks`).toEqual([{ youtube_alt_id: null }]);
+    vi.unstubAllGlobals();
   });
 });

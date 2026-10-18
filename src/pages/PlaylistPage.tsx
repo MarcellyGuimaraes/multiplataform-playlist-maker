@@ -22,7 +22,9 @@ export function PlaylistPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const playback = usePlayback(playlist ? playlist.tracks.map((t) => t.id) : []);
+  const playback = usePlayback(playlist ? playlist.tracks.map((t) => t.id) : [], {
+    youtubeAltFor: (trackId) => playlist?.tracks.find((t) => t.id === trackId)?.youtubeAltId ?? null,
+  });
   const { forget } = useAuth();
 
   /** Sem sessão (ou sessão expirada): vai para o login e volta para cá depois. */
@@ -111,6 +113,11 @@ export function PlaylistPage() {
     setTracks(tracks.map((t) => (t.id === updated.id ? updated : t)));
   }
 
+  async function saveYoutubeAlt(index: number, url: string | null) {
+    const updated = await orLogin(api.updateTrack(id, tracks[index].id, { youtubeAlt: url }));
+    setTracks(tracks.map((t) => (t.id === updated.id ? updated : t)));
+  }
+
   return (
     <main className="page">
       <p>
@@ -153,7 +160,7 @@ export function PlaylistPage() {
 
       <AddTrackForm onAdd={addTrack} />
 
-      <PlayerPanel track={current} playback={playback} />
+      <PlayerPanel track={current} playback={playback} ownerView />
 
       <SortableTracks ids={tracks.map((t) => t.id)} disabled={busy} onMove={move}>
         <TrackList
@@ -162,7 +169,7 @@ export function PlaylistPage() {
           onPlay={(i) => playback.play(tracks[i].id)}
           itemKey={(t) => t.id}
           busy={busy}
-          edit={{ onMove: move, onDelete: remove, onSaveLabel: saveLabel }}
+          edit={{ onMove: move, onDelete: remove, onSaveLabel: saveLabel, onSaveYoutubeAlt: saveYoutubeAlt }}
           renderItem={(track, _i, content, key) => (
             <SortableItem key={key} id={track.id} label={displayName(track)}>
               {content}

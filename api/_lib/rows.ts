@@ -42,6 +42,7 @@ export type TrackRow = {
   meta_title: string | null;
   meta_artist: string | null;
   meta_thumbnail_url: string | null;
+  youtube_alt_id: string | null;
   created_at: Timestamp;
   updated_at: Timestamp;
 };
@@ -75,6 +76,7 @@ export const toTrack = (r: TrackRow): Track => ({
   title: r.meta_title,
   artist: r.meta_artist,
   thumbnailUrl: r.meta_thumbnail_url,
+  youtubeAltId: r.youtube_alt_id,
   createdAt: iso(r.created_at),
 });
 

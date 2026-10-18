@@ -16,7 +16,9 @@ export function SharedPage() {
   const [playlist, setPlaylist] = useState<SharedPlaylist | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const playback = usePlayback(playlist ? playlist.tracks.map((t) => keyOf(t.position)) : []);
+  const playback = usePlayback(playlist ? playlist.tracks.map((t) => keyOf(t.position)) : [], {
+    youtubeAltFor: (key) => playlist?.tracks.find((t) => keyOf(t.position) === key)?.youtubeAltId ?? null,
+  });
 
   useEffect(() => {
     api

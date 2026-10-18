@@ -4,7 +4,7 @@ import type { SharedTrack } from '../../shared/types';
 import { PLATFORM_NAME, displayDetails, displayName, spotifyPreviewHint } from '../embed';
 import { usePlayerFactories } from '../player/PlayerAdapterContext';
 import { mountPlayer } from '../player/registry';
-import type { PlatformPlayer, PlayerEvents } from '../player/types';
+import type { EmbeddableTrack, PlatformPlayer, PlayerEvents } from '../player/types';
 import type { LoadRequest, PlaybackStatus } from '../player/usePlayback';
 import { PlatformBadge } from './PlatformBadge';
 
@@ -16,9 +16,22 @@ type Props = {
   autoplay?: boolean;
   /** O Spotify informou que está tocando só a prévia da faixa atual. */
   preview?: boolean;
+  /** Volta da versão no YouTube para o embed do Spotify na mesma faixa. */
+  onBackToSpotify?: () => void;
+  /** Quem vê é a dona, na tela de edição: o aviso de prévia sugere cadastrar uma versão no YouTube. */
+  ownerView?: boolean;
   /** Controles de reprodução exibidos dentro do painel do player. */
   children?: ReactNode;
 };
+
+/** O que o player toca: a própria faixa ou, se o pedido for pelo YouTube, a versão cadastrada nele. */
+function effectiveTrack(track: SharedTrack, request: LoadRequest | null): EmbeddableTrack {
+  const id = playsYoutubeAlt(track, request) ? track.youtubeAltId : null;
+  return id ? { platform: 'youtube', externalId: id, canonicalUrl: `https://www.youtube.com/watch?v=${id}` } : track;
+}
+
+const playsYoutubeAlt = (track: SharedTrack, request: LoadRequest | null) =>
+  request?.source === 'youtube' && track.youtubeAltId !== null;
 
 type Mounted = { platform: Platform; player: PlatformPlayer; host: HTMLElement };
 
@@ -28,7 +41,17 @@ type Mounted = { platform: Platform; player: PlatformPlayer; host: HTMLElement }
  * o mesmo player; ao trocar de plataforma, o anterior é destruído (um único player ativo).
  * Rótulo, metadados em cache e link original ficam sempre visíveis, mesmo que o player não consiga tocar.
  */
-export function EmbedPlayer({ track, request, events, status, autoplay, preview, children }: Props) {
+export function EmbedPlayer({
+  track,
+  request,
+  events,
+  status,
+  autoplay,
+  preview,
+  onBackToSpotify,
+  ownerView,
+  children,
+}: Props) {
   const factories = usePlayerFactories();
   const containerRef = useRef<HTMLDivElement>(null);
   const mounted = useRef<Mounted | null>(null);
@@ -52,7 +75,7 @@ export function EmbedPlayer({ track, request, events, status, autoplay, preview,
 
   useEffect(() => {
     if (!request) return;
-    const target = trackRef.current;
+    const target = effectiveTrack(trackRef.current, request);
     let cancelled = false;
 
     const current = mounted.current;
@@ -97,6 +120,7 @@ export function EmbedPlayer({ track, request, events, status, autoplay, preview,
 
   const name = displayName(track);
   const details = displayDetails(track);
+  const viaYoutube = playsYoutubeAlt(track, request);
   return (
     <section className="player" aria-label="Tocando agora">
       <div ref={containerRef} className="player-embed" style={{ minHeight: 152 }} />
@@ -115,9 +139,20 @@ export function EmbedPlayer({ track, request, events, status, autoplay, preview,
           </p>
         </div>
       </div>
-      {track.platform === 'spotify' && preview && (
+      {viaYoutube && (
+        <div className="notice notice-row" role="status">
+          <span>Tocando pelo YouTube: o Spotify só liberou a prévia neste navegador.</span>
+          <button type="button" className="secondary" onClick={onBackToSpotify}>
+            Voltar ao Spotify
+          </button>
+        </div>
+      )}
+      {track.platform === 'spotify' && preview && !viaYoutube && (
         <p className="notice" role="status">
           {spotifyPreviewHint(navigator.userAgent)}
+          {ownerView && !track.youtubeAltId && (
+            <> Para tocar completa em qualquer navegador, cadastre uma versão no YouTube para esta faixa.</>
+          )}
         </p>
       )}
       {track.platform === 'spotify' && (

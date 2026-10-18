@@ -35,6 +35,8 @@ export type Track = {
   title: string | null;
   artist: string | null;
   thumbnailUrl: string | null;
+  /** Id do vídeo do YouTube cadastrado como versão alternativa. Só faixas do Spotify têm. */
+  youtubeAltId: string | null;
   createdAt: string;
 };
 

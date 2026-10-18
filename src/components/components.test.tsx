@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SharedTrack } from '../../shared/types';
 import { displayName, embedUrl, spotifyPreviewHint } from '../embed';
@@ -11,7 +11,7 @@ import { TrackList } from './TrackList';
 
 afterEach(cleanup);
 
-const base = { label: '', title: null, artist: null, thumbnailUrl: null, position: 0 };
+const base = { label: '', title: null, artist: null, thumbnailUrl: null, position: 0, youtubeAltId: null };
 const yt: SharedTrack = {
   ...base,
   platform: 'youtube',
@@ -62,7 +62,7 @@ describe('displayName', () => {
 
 describe('EmbedPlayer', () => {
   let nonce = 0;
-  const req = (id: string): LoadRequest => ({ id, autoplay: true, nonce: ++nonce });
+  const req = (id: string, source: LoadRequest['source'] = 'spotify'): LoadRequest => ({ id, autoplay: true, nonce: ++nonce, source });
   const noop = { onPlaying() {}, onPaused() {}, onEnded() {}, onError() {} };
 
   function renderPlayer(track: SharedTrack, extra: Partial<Parameters<typeof EmbedPlayer>[0]> = {}) {
@@ -150,6 +150,52 @@ describe('EmbedPlayer', () => {
     expect(screen.getByRole('status').textContent).toMatch(/bloqueou o início automático/);
     rerenderTrack(yt, { status: 'playing' });
     expect(screen.getByRole('status').textContent).toBe('');
+  });
+
+  describe('versão no YouTube', () => {
+    const spAlt: SharedTrack = { ...sp, label: 'Faixa do Spotify', youtubeAltId: 'aaaaaaaaaaa' };
+    const SUGGESTION = /cadastre uma versão no YouTube/;
+
+    it('pedido pelo YouTube troca o Spotify pelo player do YouTube com o vídeo alternativo', async () => {
+      const onBackToSpotify = vi.fn();
+      const { fake, container, rerenderTrack } = renderPlayer(spAlt, { onBackToSpotify });
+      await waitFor(() => expect(fake.loads()).toHaveLength(1));
+      expect(screen.queryByText(/Tocando pelo YouTube/)).toBeNull();
+
+      rerenderTrack(spAlt, { onBackToSpotify, request: req(spAlt.externalId, 'youtube'), preview: false });
+      await waitFor(() => expect(fake.loads()).toHaveLength(2));
+      expect(fake.log.map((e) => `${e.platform}:${e.action}`)).toEqual([
+        'spotify:mount', 'spotify:load', 'spotify:destroy', 'youtube:mount', 'youtube:load',
+      ]);
+      expect(fake.loads()[1]).toMatchObject({ platform: 'youtube', id: 'aaaaaaaaaaa', autoplay: true });
+      expect(container.querySelectorAll('iframe')).toHaveLength(1);
+
+      // metadados e link continuam os da faixa do Spotify
+      expect(screen.getByText('Faixa do Spotify')).toBeTruthy();
+      expect(screen.getByRole('link', { name: /Abrir no Spotify/ }).getAttribute('href')).toBe(sp.originalUrl);
+      expect(screen.getByRole('note').textContent).toMatch(/30 segundos/);
+
+      const notice = screen.getAllByRole('status').find((el) => /Tocando pelo YouTube/.test(el.textContent ?? ''))!;
+      expect(notice.textContent).toMatch(/o Spotify só liberou a prévia neste navegador/);
+      fireEvent.click(within(notice).getByRole('button', { name: 'Voltar ao Spotify' }));
+      expect(onBackToSpotify).toHaveBeenCalledOnce();
+    });
+
+    it('pedido pelo YouTube numa faixa sem versão continua no Spotify', async () => {
+      const { fake } = renderPlayer(sp, { request: req(sp.externalId, 'youtube') });
+      await waitFor(() => expect(fake.loads()).toHaveLength(1));
+      expect(fake.loads()[0].platform).toBe('spotify');
+      expect(screen.queryByText(/Tocando pelo YouTube/)).toBeNull();
+    });
+
+    it('sugestão de cadastrar a versão só para a dona, em faixa sem versão', () => {
+      const { rerenderTrack } = renderPlayer(sp, { preview: true });
+      expect(screen.queryByText(SUGGESTION)).toBeNull();
+      rerenderTrack(sp, { preview: true, ownerView: true });
+      expect(screen.getByText(SUGGESTION).textContent).toContain(spotifyPreviewHint(navigator.userAgent));
+      rerenderTrack(spAlt, { preview: true, ownerView: true });
+      expect(screen.queryByText(SUGGESTION)).toBeNull();
+    });
   });
 
   it('SDK indisponível: cai para iframe simples e avisa', async () => {

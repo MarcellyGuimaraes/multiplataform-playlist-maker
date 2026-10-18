@@ -43,14 +43,16 @@ async function publicPlaylistWithTracks() {
       cookie: maria,
     })
   ).body as Track;
-  await call(addTrack, {
-    method: 'POST',
-    query: { id: created.id },
-    body: { url: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC', label: 'dois' },
-    cookie: maria,
-  });
+  const t2 = (
+    await call(addTrack, {
+      method: 'POST',
+      query: { id: created.id },
+      body: { url: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC', label: 'dois' },
+      cookie: maria,
+    })
+  ).body as Track;
   const p = await setVisibility(created.id, 'public');
-  return { p: { ...p, shareToken: p.shareToken! }, t1 };
+  return { p: { ...p, shareToken: p.shareToken! }, t1, t2 };
 }
 const view = (token: string, cookie?: string) => call(shared, { method: 'GET', query: { token }, cookie });
 
@@ -73,6 +75,22 @@ describe('GET /api/shared/[token]', () => {
     const [{ id: ownerId }] = (await testDb.sql`select id from users`) as { id: string }[];
     expect(raw).not.toContain(ownerId);
     expect(Object.keys(body)).toEqual(['name', 'tracks']);
+  });
+
+  it('inclui a versão no YouTube da faixa do Spotify, ainda sem id de faixa', async () => {
+    const { p } = await publicPlaylistWithTracks();
+    const owner = (await call(playlistById, { method: 'GET', query: { id: p.id }, cookie: maria })).body as PlaylistDetail;
+    const spotify = owner.tracks[1];
+    await call(trackById, {
+      method: 'PATCH',
+      query: { id: p.id, trackId: spotify.id },
+      body: { youtubeAlt: 'https://youtu.be/aaaaaaaaaaa' },
+      cookie: maria,
+    });
+    const body = (await view(p.shareToken)).body as SharedPlaylist;
+    expect(body.tracks.map((t) => t.youtubeAltId)).toEqual([null, 'aaaaaaaaaaa']);
+    for (const t of body.tracks) expect(t).not.toHaveProperty('id');
+    expect(JSON.stringify(body)).not.toContain(spotify.id);
   });
 
   it('abre igual para visitante e para outra conta logada', async () => {
@@ -146,25 +164,27 @@ describe('token público não permite escrita', () => {
     ['da dona', () => maria],
     ['de outra conta', () => signupAs('ana@exemplo.com')],
   ])('com sessão %s, toda rota de escrita com o token no lugar do id responde 404 e nada muda', async (_name, session) => {
-    const { p, t1 } = await publicPlaylistWithTracks();
+    const { p, t1, t2 } = await publicPlaylistWithTracks();
     const cookie = await session();
     const token = p.shareToken;
     const results = await Promise.all([
       call(addTrack, { method: 'POST', query: { id: token }, body: { url: 'https://youtu.be/dQw4w9WgXcQ' }, cookie }),
       call(trackById, { method: 'DELETE', query: { id: token, trackId: t1.id }, cookie }),
       call(trackById, { method: 'PATCH', query: { id: token, trackId: t1.id }, body: { label: 'x' }, cookie }),
+      call(trackById, { method: 'PATCH', query: { id: token, trackId: t2.id }, body: { youtubeAlt: 'https://youtu.be/aaaaaaaaaaa' }, cookie }),
       call(reorder, { method: 'PUT', query: { id: token }, body: { trackIds: [t1.id] }, cookie }),
       call(playlistById, { method: 'PATCH', query: { id: token }, body: { name: 'hack' }, cookie }),
       call(playlistById, { method: 'DELETE', query: { id: token }, cookie }),
       call(shareTokenRoute, { method: 'POST', query: { id: token }, cookie }),
       call(visibilityRoute, { method: 'PUT', query: { id: token }, body: { visibility: 'private' }, cookie }),
     ]);
-    expect(results.map((r) => r.statusCode)).toEqual([404, 404, 404, 404, 404, 404, 404, 404]);
+    expect(results.map((r) => r.statusCode)).toEqual([404, 404, 404, 404, 404, 404, 404, 404, 404]);
 
     const after = (await call(playlistById, { method: 'GET', query: { id: p.id }, cookie: maria })).body as PlaylistDetail;
     expect(after.name).toBe('Compartilhada');
     expect(after.visibility).toBe('public');
     expect(after.shareToken).toBe(token);
     expect(after.tracks.map((t) => t.label)).toEqual(['um', 'dois']);
+    expect(after.tracks.map((t) => t.youtubeAltId)).toEqual([null, null]);
   });
 });

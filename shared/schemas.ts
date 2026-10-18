@@ -30,7 +30,24 @@ export const addTrackSchema = z.object({
   label: trackLabel.optional().default(''),
 });
 
-export const updateTrackSchema = z.object({ label: trackLabel });
+export const YOUTUBE_ALT_ERROR = 'Cole o link de um vídeo do YouTube.';
+
+/**
+ * Edição de faixa: rótulo e/ou versão no YouTube (link para cadastrar ou trocar, null para remover).
+ * O link só é validado como vídeo do YouTube no handler, com parseTrackUrl.
+ */
+export const updateTrackSchema = z
+  .object({
+    label: trackLabel.optional(),
+    youtubeAlt: z
+      .string({ error: YOUTUBE_ALT_ERROR })
+      .trim()
+      .min(1, YOUTUBE_ALT_ERROR)
+      .max(TRACK_URL_MAX, `O link deve ter no máximo ${TRACK_URL_MAX} caracteres.`)
+      .nullable()
+      .optional(),
+  })
+  .refine((b) => b.label !== undefined || b.youtubeAlt !== undefined, 'Informe o que alterar na faixa.');
 
 export const reorderSchema = z.object({
   trackIds: z.array(z.uuid({ error: 'Identificador de faixa inválido.' }), {

@@ -1,10 +1,21 @@
-import { updateTrackSchema } from '../../../../shared/schemas.js';
+import { parseTrackUrl } from '../../../../shared/parseTrackUrl.js';
+import { updateTrackSchema, YOUTUBE_ALT_ERROR } from '../../../../shared/schemas.js';
 import { requireUser } from '../../../_lib/auth.js';
 import { getSql } from '../../../_lib/db.js';
-import { isUuid, notFound, param, parseBody, route } from '../../../_lib/http.js';
+import { badRequest, isUuid, notFound, param, parseBody, route } from '../../../_lib/http.js';
 import { toTrack, type TrackRow } from '../../../_lib/rows.js';
 
 const TRACK_NOT_FOUND = 'Faixa não encontrada.';
+const ONLY_SPOTIFY = 'Só faixas do Spotify aceitam versão no YouTube.';
+
+/**
+ * Valida o link da versão alternativa com as mesmas regras de detecção do YouTube. As mensagens do
+ * parser citam as três plataformas, então qualquer recusa vira a mensagem de vídeo do YouTube.
+ */
+function youtubeVideoId(url: string): string | null {
+  const parsed = parseTrackUrl(url);
+  return parsed.kind === 'track' && parsed.platform === 'youtube' ? parsed.externalId : null;
+}
 
 // Toda operação filtra por playlist_id E id, e exige que a playlist seja da conta da sessão:
 // uma faixa de outra playlist ou de outra conta responde "não encontrado".
@@ -17,11 +28,26 @@ export default route({
     if (!isUuid(id) || !isUuid(trackId)) return notFound(res, TRACK_NOT_FOUND);
     const body = parseBody(req, res, updateTrackSchema);
     if (!body) return;
+    const setAlt = body.youtubeAlt !== undefined;
+    const altId = body.youtubeAlt ? youtubeVideoId(body.youtubeAlt) : null;
+    if (body.youtubeAlt && !altId) return badRequest(res, YOUTUBE_ALT_ERROR);
     const sql = getSql();
+    if (setAlt) {
+      const [track] = (await sql`
+        select t.platform from tracks t join playlists p on p.id = t.playlist_id
+        where t.id = ${trackId} and p.id = ${id} and p.owner_id = ${user.id}
+      `) as Pick<TrackRow, 'platform'>[];
+      if (!track) return notFound(res, TRACK_NOT_FOUND);
+      if (track.platform !== 'spotify') return badRequest(res, ONLY_SPOTIFY);
+    }
+    // Só os campos enviados mudam: rótulo ausente fica como está, e a versão no YouTube só muda com setAlt.
     const [row] = (await sql`
       with p as (select id from playlists where id = ${id} and owner_id = ${user.id}),
       upd as (
-        update tracks set label = ${body.label}, updated_at = now()
+        update tracks set
+          label = coalesce(${body.label ?? null}::text, label),
+          youtube_alt_id = case when ${setAlt}::boolean then ${altId}::text else youtube_alt_id end,
+          updated_at = now()
         where id = ${trackId} and playlist_id in (select id from p)
         returning *
       ),

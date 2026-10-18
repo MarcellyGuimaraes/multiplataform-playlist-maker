@@ -7,3 +7,4 @@ dist
 *.log
 .dev-db
 .spec-architect
+.spec-architect/attachments/

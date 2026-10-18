@@ -194,6 +194,42 @@ describe('usePlayback: temporizadores (3.2)', () => {
   });
 });
 
+describe('usePlayback: prévia do Spotify', () => {
+  it('liga e desliga conforme o player informa', () => {
+    const { result } = setup();
+    act(() => result.current.play('a'));
+    expect(result.current.preview).toBe(false);
+    act(() => result.current.events.onPreview?.(true));
+    expect(result.current.preview).toBe(true);
+    act(() => result.current.events.onPreview?.(false));
+    expect(result.current.preview).toBe(false);
+  });
+
+  it('zera ao avançar sozinho, na próxima e ao escolher outra faixa', () => {
+    const { result } = setup();
+    act(() => result.current.play('a'));
+    act(() => result.current.events.onPreview?.(true));
+    act(() => result.current.events.onEnded());
+    expect(result.current.currentId).toBe('b');
+    expect(result.current.preview).toBe(false);
+    act(() => result.current.events.onPreview?.(true));
+    act(() => result.current.next());
+    expect(result.current.preview).toBe(false);
+    act(() => result.current.events.onPreview?.(true));
+    act(() => result.current.play('a'));
+    expect(result.current.preview).toBe(false);
+  });
+
+  it('zera quando o player fecha', () => {
+    const { result, rerender } = setup();
+    act(() => result.current.play('a'));
+    act(() => result.current.events.onPreview?.(true));
+    rerender({ list: ['b', 'c'] });
+    expect(result.current.currentId).toBeNull();
+    expect(result.current.preview).toBe(false);
+  });
+});
+
 describe('usePlayback: lista muda durante a reprodução (3.3)', () => {
   it('reordenar altera a próxima', () => {
     const { result, rerender } = setup();

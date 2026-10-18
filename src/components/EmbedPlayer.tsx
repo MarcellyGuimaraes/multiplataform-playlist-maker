@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Platform } from '../../shared/parseTrackUrl';
 import type { SharedTrack } from '../../shared/types';
-import { PLATFORM_NAME, displayDetails, displayName } from '../embed';
+import { PLATFORM_NAME, displayDetails, displayName, spotifyPreviewHint } from '../embed';
 import { usePlayerFactories } from '../player/PlayerAdapterContext';
 import { mountPlayer } from '../player/registry';
 import type { PlatformPlayer, PlayerEvents } from '../player/types';
@@ -14,6 +14,8 @@ type Props = {
   events: PlayerEvents;
   status?: PlaybackStatus;
   autoplay?: boolean;
+  /** O Spotify informou que está tocando só a prévia da faixa atual. */
+  preview?: boolean;
   /** Controles de reprodução exibidos dentro do painel do player. */
   children?: ReactNode;
 };
@@ -26,7 +28,7 @@ type Mounted = { platform: Platform; player: PlatformPlayer; host: HTMLElement }
  * o mesmo player; ao trocar de plataforma, o anterior é destruído (um único player ativo).
  * Rótulo, metadados em cache e link original ficam sempre visíveis, mesmo que o player não consiga tocar.
  */
-export function EmbedPlayer({ track, request, events, status, autoplay, children }: Props) {
+export function EmbedPlayer({ track, request, events, status, autoplay, preview, children }: Props) {
   const factories = usePlayerFactories();
   const containerRef = useRef<HTMLDivElement>(null);
   const mounted = useRef<Mounted | null>(null);
@@ -40,6 +42,7 @@ export function EmbedPlayer({ track, request, events, status, autoplay, children
       onPaused: () => eventsRef.current.onPaused(),
       onEnded: () => eventsRef.current.onEnded(),
       onError: (reason) => eventsRef.current.onError(reason),
+      onPreview: (isPreview) => eventsRef.current.onPreview?.(isPreview),
     }),
     [],
   );
@@ -112,6 +115,11 @@ export function EmbedPlayer({ track, request, events, status, autoplay, children
           </p>
         </div>
       </div>
+      {track.platform === 'spotify' && preview && (
+        <p className="notice" role="status">
+          {spotifyPreviewHint(navigator.userAgent)}
+        </p>
+      )}
       {track.platform === 'spotify' && (
         <p className="notice" role="note">
           O Spotify só toca a faixa completa para quem tem login feito na conta Spotify neste navegador.

@@ -184,3 +184,69 @@ describe('adaptador Spotify (iframe do MVP)', () => {
     expect(events.onEnded).not.toHaveBeenCalled();
   });
 });
+
+describe('detecção da prévia do Spotify', () => {
+  // O embed toca a prévia (≤ 30 s) quando não recebe o login; o app só informa, sem recarregar.
+  const PREVIEW = 25_591;
+  const FULL = 114_472;
+  const update = (fromEmbed: (d: unknown) => void, position: number, duration: number) =>
+    fromEmbed({ type: 'playback_update', payload: { position, isPaused: false, duration } });
+
+  it('prévia: avisa uma vez, sem recarregar nem mandar comandos extras', async () => {
+    const { player, events, iframe, posted, fromEmbed } = await setup();
+    player.load(track(A), { autoplay: true });
+    const srcSet = vi.spyOn(iframe(), 'src', 'set');
+    fromEmbed({ type: 'ready' });
+    update(fromEmbed, 0, 0); // ainda carregando: não classifica
+    expect(events.onPreview).not.toHaveBeenCalled();
+    update(fromEmbed, 0, PREVIEW);
+    update(fromEmbed, 1000, PREVIEW);
+    expect(events.onPreview).toHaveBeenCalledTimes(1);
+    expect(events.onPreview).toHaveBeenCalledWith(true);
+    expect(srcSet).not.toHaveBeenCalled();
+    expect(posted()).toEqual([{ command: 'play' }]);
+  });
+
+  it('faixa completa: avisa que não é prévia', async () => {
+    const { player, events, fromEmbed } = await setup();
+    player.load(track(A), { autoplay: true });
+    fromEmbed({ type: 'ready' });
+    update(fromEmbed, 0, FULL);
+    update(fromEmbed, 1000, FULL);
+    expect(events.onPreview).toHaveBeenCalledTimes(1);
+    expect(events.onPreview).toHaveBeenCalledWith(false);
+  });
+
+  it('prévia seguida da faixa completa (clique no Firefox recarrega o embed): true e depois false', async () => {
+    const { player, events, fromEmbed } = await setup();
+    player.load(track(A), { autoplay: true });
+    fromEmbed({ type: 'ready' });
+    update(fromEmbed, 0, PREVIEW);
+    fromEmbed({ type: 'ready' });
+    update(fromEmbed, 0, FULL);
+    expect(events.onPreview.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('nova faixa reclassifica, inclusive a mesma faixa de novo', async () => {
+    const { player, events, fromEmbed } = await setup();
+    player.load(track(A), { autoplay: true });
+    fromEmbed({ type: 'ready' });
+    update(fromEmbed, 0, PREVIEW);
+    player.load(track(A), { autoplay: true }); // play_from_start
+    update(fromEmbed, 0, PREVIEW);
+    player.load(track(B), { autoplay: true });
+    fromEmbed({ type: 'ready' });
+    update(fromEmbed, 0, PREVIEW);
+    expect(events.onPreview.mock.calls).toEqual([[true], [true], [true]]);
+  });
+
+  it('o fim da prévia continua contando como fim da faixa', async () => {
+    const { player, events, fromEmbed } = await setup();
+    player.load(track(A), { autoplay: true });
+    fromEmbed({ type: 'ready' });
+    update(fromEmbed, 0, PREVIEW);
+    update(fromEmbed, PREVIEW, PREVIEW);
+    expect(events.onPlaying).toHaveBeenCalledTimes(1);
+    expect(events.onEnded).toHaveBeenCalledTimes(1);
+  });
+});

@@ -13,6 +13,7 @@ export function PlayerPanel({ track, playback }: { track: SharedTrack | null; pl
       events={playback.events}
       status={playback.status}
       autoplay={playback.prefs.autoplay}
+      preview={playback.preview}
     >
       <PlaybackControls {...playback} />
     </EmbedPlayer>

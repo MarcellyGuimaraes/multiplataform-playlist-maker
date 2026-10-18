@@ -2,7 +2,7 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SharedTrack } from '../../shared/types';
-import { displayName, embedUrl } from '../embed';
+import { displayName, embedUrl, spotifyPreviewHint } from '../embed';
 import { PlayerAdapterProvider } from '../player/PlayerAdapterContext';
 import { createFakeFactories } from '../player/testing';
 import type { LoadRequest } from '../player/usePlayback';
@@ -89,6 +89,30 @@ describe('EmbedPlayer', () => {
   it('Spotify: mostra o aviso de login e prévia de 30 segundos', () => {
     renderPlayer(sp);
     expect(screen.getByRole('note').textContent).toMatch(/login.*30 segundos/s);
+  });
+
+  it('Spotify em prévia: mostra a orientação do navegador junto ao aviso geral; some sem prévia', () => {
+    const { rerenderTrack } = renderPlayer(sp, { preview: true });
+    const hint = screen.getAllByRole('status').find((el) => /prévia/.test(el.textContent ?? ''));
+    expect(hint?.textContent).toBe(spotifyPreviewHint(navigator.userAgent));
+    expect(screen.getByRole('note').textContent).toMatch(/login.*30 segundos/s);
+    rerenderTrack(sp, { preview: false });
+    expect(screen.queryByText(spotifyPreviewHint(navigator.userAgent))).toBeNull();
+  });
+
+  it('aviso de prévia não aparece em YouTube nem SoundCloud', () => {
+    const { rerenderTrack } = renderPlayer(yt, { preview: true });
+    expect(screen.queryByText(spotifyPreviewHint(navigator.userAgent))).toBeNull();
+    rerenderTrack(sc, { preview: true });
+    expect(screen.queryByText(spotifyPreviewHint(navigator.userAgent))).toBeNull();
+  });
+
+  it('o evento de prévia do player chega a quem usa o EmbedPlayer', async () => {
+    const onPreview = vi.fn();
+    const { fake } = renderPlayer(sp, { events: { ...noop, onPreview } });
+    await waitFor(() => expect(fake.loads()).toHaveLength(1));
+    fake.events().onPreview?.(true);
+    expect(onPreview).toHaveBeenCalledWith(true);
   });
 
   it('SoundCloud: o player recebe a URL canônica mesmo com link curto original', async () => {

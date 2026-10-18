@@ -18,6 +18,12 @@ export const END_MARGIN_MS = 1000;
 /** Se o player volta a 0 pausado e o último progresso estava nesta janela final, também é fim. */
 export const RESET_WINDOW_MS = 5000;
 
+/**
+ * Duração máxima de uma prévia do Spotify. O embed decide entre prévia e faixa completa ao carregar, pelos
+ * cookies de login que recebe; o app só informa qual dos dois está tocando (recarregar não muda o resultado).
+ */
+export const PREVIEW_MAX_MS = 30_000;
+
 /** Mesma URL do iframe do MVP, sem parâmetros extras. */
 export const spotifyEmbedSrc = (track: EmbeddableTrack) =>
   `${SPOTIFY_ORIGIN}/embed/track/${encodeURIComponent(track.externalId)}`;
@@ -75,6 +81,8 @@ export const createSpotifyPlayer: PlayerFactory = async (container, events) => {
 
   let ready = false;
   let playWhenReady = false;
+  /** Classificação da faixa carregada: null até o primeiro progresso com duração. */
+  let preview: boolean | null = null;
 
   const send = (command: string) => iframe.contentWindow?.postMessage({ command }, SPOTIFY_ORIGIN);
 
@@ -89,6 +97,12 @@ export const createSpotifyPlayer: PlayerFactory = async (container, events) => {
         send('play');
       }
     } else if (msg.type === 'playback_update' && msg.payload) {
+      const { duration } = msg.payload;
+      // Reavalia a cada update: no Firefox, o clique na prévia recarrega o embed com a faixa completa.
+      if (duration > 0 && (duration <= PREVIEW_MAX_MS) !== preview) {
+        preview = duration <= PREVIEW_MAX_MS;
+        events.onPreview?.(preview);
+      }
       tracker.update(msg.payload);
     } else if (msg.type === 'error' && !msg.payload?.recoverable) {
       events.onError(`spotify:${msg.payload?.message ?? 'erro'}`);
@@ -99,6 +113,7 @@ export const createSpotifyPlayer: PlayerFactory = async (container, events) => {
   return {
     load(track, { autoplay }) {
       tracker.reset();
+      preview = null;
       const src = spotifyEmbedSrc(track);
       if (iframe.src === src && ready) {
         // Mesma faixa de novo: atribuir o mesmo src não recarrega o iframe.

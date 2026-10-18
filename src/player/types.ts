@@ -9,6 +9,8 @@ export type PlayerEvents = {
   onPaused(): void;
   onEnded(): void;
   onError(reason: string): void;
+  /** Só Spotify: a faixa carregada está tocando a prévia (true) ou a faixa completa (false). */
+  onPreview?(isPreview: boolean): void;
 };
 
 /** Player de uma plataforma montado num contêiner. Reaproveitável entre faixas da mesma plataforma. */

@@ -8,5 +8,6 @@ export function spyEvents() {
     onPaused: vi.fn(),
     onEnded: vi.fn(),
     onError: vi.fn(),
+    onPreview: vi.fn(),
   } satisfies PlayerEvents;
 }

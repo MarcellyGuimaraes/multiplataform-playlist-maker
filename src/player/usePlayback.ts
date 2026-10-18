@@ -20,6 +20,8 @@ export function usePlayback(trackIds: readonly string[], { rng }: { rng?: Rng } 
   const [order, setOrder] = useState<string[]>(() => [...trackIds]);
   const [status, setStatus] = useState<PlaybackStatus>('idle');
   const [request, setRequest] = useState<LoadRequest | null>(null);
+  /** O player do Spotify informou que a faixa atual está tocando só a prévia. */
+  const [preview, setPreview] = useState(false);
 
   // Os eventos dos players chegam de forma assíncrona: leem sempre o estado mais recente.
   const latest = useRef({ prefs, currentId, order, status });
@@ -40,6 +42,7 @@ export function usePlayback(trackIds: readonly string[], { rng }: { rng?: Rng } 
       clearTimers();
       setCurrentId(id);
       setStatus('loading');
+      setPreview(false);
       setRequest({ id, autoplay: true, nonce: ++nonce.current });
       if (auto) {
         blockedTimer.current = setTimeout(() => {
@@ -55,6 +58,7 @@ export function usePlayback(trackIds: readonly string[], { rng }: { rng?: Rng } 
     setCurrentId(null);
     setRequest(null);
     setStatus('idle');
+    setPreview(false);
   }, [clearTimers]);
 
   // A fila acompanha mudanças na playlist; se a faixa atual sumiu, o player fecha.
@@ -134,6 +138,7 @@ export function usePlayback(trackIds: readonly string[], { rng }: { rng?: Rng } 
           skipTimer.current = setTimeout(() => advance(true), SKIP_UNAVAILABLE_MS);
         }
       },
+      onPreview: setPreview,
     }),
     [advance, clearTimers],
   );
@@ -144,6 +149,7 @@ export function usePlayback(trackIds: readonly string[], { rng }: { rng?: Rng } 
     order,
     status,
     request,
+    preview,
     prefs,
     canPrev: prevId(order, currentId, { repeat }) !== null,
     canNext: currentId !== null && nextId(order, currentId, { repeat }) !== null,

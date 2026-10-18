@@ -1,12 +1,10 @@
-// Plugin de desenvolvimento: serve as funções de api/ dentro do `vite dev`, imitando o roteamento
-// por arquivos da Vercel. Sem DATABASE_URL usa um Postgres local (PGlite em .dev-db/); com ela, usa o Neon.
+// Plugin de desenvolvimento: serve a API dentro do `vite dev` pela mesma função única do deploy
+// (api/index.ts, que despacha as rotas). Sem DATABASE_URL usa um Postgres local (PGlite em .dev-db/);
+// com ela, usa o Neon.
 // Só roda no servidor de desenvolvimento — não entra no build nem no deploy.
-import { readdirSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { join, relative, sep } from 'node:path';
+import { join } from 'node:path';
 import { loadEnv, type Plugin } from 'vite';
-
-type Route = { pattern: RegExp; params: string[]; file: string; dynamic: number };
 
 /** Marca que a DATABASE_URL em process.env foi copiada do .env por este plugin. */
 const FROM_ENV_FILE = '__DEV_API_DATABASE_URL_FROM_ENV_FILE';
@@ -54,14 +52,12 @@ export function devApi(): Plugin {
         const url = new URL(req.url ?? '/', 'http://localhost');
         if (!url.pathname.startsWith('/api/')) return next();
         try {
-          const match = matchRoute(discoverRoutes(root), url.pathname);
-          if (!match) return sendJson(res, 404, { error: { code: 'not_found', message: 'Rota não encontrada.' } });
           if (localSql) {
             const db = await server.ssrLoadModule('/api/_lib/db.ts');
             db.overrideSql(localSql);
           }
-          const mod = await server.ssrLoadModule(`/${match.file}`);
-          const query = { ...Object.fromEntries(url.searchParams), ...match.params };
+          const mod = await server.ssrLoadModule('/api/index.ts');
+          const query = Object.fromEntries(url.searchParams);
           let body: unknown;
           try {
             body = await readJsonBody(req);
@@ -76,47 +72,6 @@ export function devApi(): Plugin {
       });
     },
   };
-}
-
-export function discoverRoutes(root: string): Route[] {
-  const apiDir = join(root, 'api');
-  const routes: Route[] = [];
-  const walk = (dir: string) => {
-    for (const name of readdirSync(dir)) {
-      if (name.startsWith('_') || name.startsWith('.')) continue;
-      const full = join(dir, name);
-      if (statSync(full).isDirectory()) walk(full);
-      else if (name.endsWith('.ts') && !name.endsWith('.test.ts')) {
-        const rel = relative(root, full).split(sep).join('/');
-        const segments = rel.replace(/\.ts$/, '').split('/');
-        if (segments.at(-1) === 'index') segments.pop();
-        const params: string[] = [];
-        const source = segments
-          .map((s) => {
-            const dyn = /^\[(.+)\]$/.exec(s);
-            if (!dyn) return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            params.push(dyn[1]);
-            return '([^/]+)';
-          })
-          .join('/');
-        routes.push({ pattern: new RegExp(`^/${source}/?$`), params, file: rel, dynamic: params.length });
-      }
-    }
-  };
-  walk(apiDir);
-  // Como na Vercel: segmentos estáticos têm prioridade sobre dinâmicos.
-  return routes.sort((a, b) => a.dynamic - b.dynamic);
-}
-
-export function matchRoute(routes: Route[], pathname: string) {
-  for (const route of routes) {
-    const m = route.pattern.exec(pathname);
-    if (m) {
-      const params = Object.fromEntries(route.params.map((p, i) => [p, decodeURIComponent(m[i + 1])]));
-      return { file: route.file, params };
-    }
-  }
-  return null;
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {

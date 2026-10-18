@@ -1,6 +1,6 @@
-import { requireUser } from '../../_lib/auth.js';
-import { getSql } from '../../_lib/db.js';
-import { conflict, isUuid, newShareToken, notFound, param, route } from '../../_lib/http.js';
+import { requireUser } from '../../../_lib/auth.js';
+import { getSql } from '../../../_lib/db.js';
+import { conflict, isUuid, newShareToken, notFound, param, route } from '../../../_lib/http.js';
 
 /**
  * Gera um novo token público; o anterior deixa de funcionar imediatamente.

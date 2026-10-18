@@ -1,6 +1,6 @@
-import type { AuthUser } from '../../shared/types.js';
-import { getSessionUser } from '../_lib/auth.js';
-import { route } from '../_lib/http.js';
+import type { AuthUser } from '../../../shared/types.js';
+import { getSessionUser } from '../../_lib/auth.js';
+import { route } from '../../_lib/http.js';
 
 /** Quem está logada. Visitante recebe 200 com { user: null }, não 401, para a carga inicial do front. */
 export default route({

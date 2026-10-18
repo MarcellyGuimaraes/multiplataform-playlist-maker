@@ -1,11 +1,11 @@
 // Testes dos handlers de faixas contra um Postgres real (PGlite), com o fetch externo (oEmbed) simulado.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSql } from '../../api/_lib/db.js';
-import playlists from '../../api/playlists/index.js';
-import playlistById from '../../api/playlists/[id]/index.js';
-import addTrack from '../../api/playlists/[id]/tracks/index.js';
-import trackById from '../../api/playlists/[id]/tracks/[trackId].js';
-import reorder from '../../api/playlists/[id]/tracks/order.js';
+import playlists from '../../api/_routes/playlists/index.js';
+import playlistById from '../../api/_routes/playlists/[id]/index.js';
+import addTrack from '../../api/_routes/playlists/[id]/tracks/index.js';
+import trackById from '../../api/_routes/playlists/[id]/tracks/[trackId].js';
+import reorder from '../../api/_routes/playlists/[id]/tracks/order.js';
 import type { PlaylistDetail, Track } from '../../shared/types.js';
 import { call, type FakeReqInit } from '../helpers.js';
 import { createTestDb, signupAs } from '../pgdb.js';

@@ -19,7 +19,7 @@ O banco guarda apenas **referências** às faixas (link, plataforma, identificad
 ## Stack
 
 - **Front:** Vite + React + TypeScript (SPA em `src/`)
-- **API:** funções serverless da Vercel em `api/` (a única parte que fala com o banco)
+- **API:** uma única função serverless da Vercel (`api/index.ts`, a única parte que fala com o banco). Um rewrite no `vercel.json` manda todo `/api/*` para ela, e ela escolhe o handler pela tabela de rotas em `api/_lib/router.ts`. Os handlers ficam em `api/_routes/`, numa pasta com o mesmo formato das URLs. É uma função só porque o plano Hobby da Vercel aceita no máximo 12 funções por deploy, e cada arquivo solto em `api/` viraria uma. **Rota nova:** crie o handler em `api/_routes/` e adicione uma linha na tabela de `router.ts`.
 - **Banco:** Neon Postgres via `@neondatabase/serverless` (driver HTTP), SQL puro
 - **Compartilhado:** `shared/` — parser de links, schemas de validação e tipos usados por front e API
 
@@ -103,7 +103,7 @@ npm install
 npm run dev           # front + API em http://localhost:5173
 ```
 
-O `npm run dev` serve também as funções de `api/` (plugin `scripts/vite-dev-api.ts`, que imita o roteamento por arquivos da Vercel; só existe no servidor de desenvolvimento):
+O `npm run dev` serve também a API, pela mesma função única do deploy (plugin `scripts/vite-dev-api.ts`; só existe no servidor de desenvolvimento):
 
 - **sem `DATABASE_URL`** → usa um Postgres local em disco ([PGlite](https://pglite.dev)) na pasta `.dev-db/`, com as migrações aplicadas automaticamente. Não precisa de conta em lugar nenhum. Para zerar os dados, apague `.dev-db/`.
 - **com `DATABASE_URL` no `.env`** → usa o Neon de verdade.
@@ -125,7 +125,7 @@ npm test
 
 - `shared/*.test.ts` — parser de links (todos os formatos aceitos e rejeitados) e limites de validação.
 - `api/_lib/*.test.ts` — oEmbed e resolução de link curto com `fetch` simulado, hash de senha e envio de e-mail (com `nodemailer` simulado).
-- `tests/api/*.test.ts` — handlers da API. Os de contas, sessão, redefinição de senha, posse (duas contas), visibilidade, faixas e compartilhamento rodam contra um **Postgres real em memória** ([PGlite](https://pglite.dev)) com as migrações aplicadas, então o SQL é exercitado de verdade.
+- `tests/api/*.test.ts` — handlers da API e o despacho de rotas (`router.test.ts`). Os de contas, sessão, redefinição de senha, posse (duas contas), visibilidade, faixas e compartilhamento rodam contra um **Postgres real em memória** ([PGlite](https://pglite.dev)) com as migrações aplicadas, então o SQL é exercitado de verdade.
 - `src/components/*.test.tsx` — player, controles de reprodução e lista somente leitura.
 - `src/player/*.test.ts` — fila (limites, repetir, aleatório), preferências, carregador de SDK, estado de reprodução (com temporizadores) e os três adaptadores, com SDKs falsos.
 - `tests/ui/*.test.tsx` — fluxos de ponta a ponta da interface (jsdom): páginas React reais com o `fetch` roteado para os handlers reais sobre PGlite (com os cookies de sessão), e testes de componente das telas de conta, da tela inicial e do controle de visibilidade com `fetch` simulado.
@@ -134,7 +134,7 @@ npm test
 
 1. Crie um projeto na Vercel importando este repositório (framework: Vite; `vercel.json` já define build e rotas).
 2. Em **Settings → Environment Variables**, adicione `DATABASE_URL`, `SMTP_USER`, `SMTP_APP_PASSWORD` e `APP_URL` para *Production* e *Preview* (em *Preview*, `APP_URL` deve apontar para o endereço do preview, ou os links de redefinição levarão à produção).
-3. Faça o deploy. As rotas `/p/:id`, `/s/:token`, `/entrar`, `/cadastro`, `/esqueci-senha` e `/redefinir-senha` são servidas pela SPA; `/api/*` são as funções.
+3. Faça o deploy. As rotas `/p/:id`, `/s/:token`, `/entrar`, `/cadastro`, `/esqueci-senha` e `/redefinir-senha` são servidas pela SPA; `/api/*` vai para a função da API.
 4. Aplique as migrações (`npm run db:migrate`) no banco de produção antes do deploy. Lembre que a `002` apaga as playlists existentes — faça backup ou um branch do Neon antes. A `003` é aditiva.
 
 Rollback: promova o deploy anterior no painel da Vercel. A coluna da `003` pode ficar (o código anterior a ignora) ou ser removida com `alter table tracks drop column youtube_alt_id`. **Depois da migração 002 isso não basta**: o código anterior não funciona com o schema novo (`owner_id` obrigatório), então voltar exige restaurar o backup feito antes da migração.

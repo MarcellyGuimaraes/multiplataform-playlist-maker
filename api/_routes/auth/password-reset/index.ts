@@ -1,8 +1,8 @@
-import { passwordResetRequestSchema } from '../../../shared/schemas.js';
-import { hashToken, newSecretToken } from '../../_lib/auth.js';
-import { getSql } from '../../_lib/db.js';
-import { parseBody, route } from '../../_lib/http.js';
-import { sendPasswordResetEmail } from '../../_lib/mailer.js';
+import { passwordResetRequestSchema } from '../../../../shared/schemas.js';
+import { hashToken, newSecretToken } from '../../../_lib/auth.js';
+import { getSql } from '../../../_lib/db.js';
+import { parseBody, route } from '../../../_lib/http.js';
+import { sendPasswordResetEmail } from '../../../_lib/mailer.js';
 
 export const RESET_REQUESTED = 'Se o e-mail estiver cadastrado, enviamos um link para redefinir a senha.';
 

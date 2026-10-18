@@ -1,8 +1,8 @@
-import { playlistNameSchema } from '../../shared/schemas.js';
-import type { PlaylistList } from '../../shared/types.js';
-import { getSessionUser, requireUser } from '../_lib/auth.js';
-import { getSql } from '../_lib/db.js';
-import { parseBody, route } from '../_lib/http.js';
+import { playlistNameSchema } from '../../../shared/schemas.js';
+import type { PlaylistList } from '../../../shared/types.js';
+import { getSessionUser, requireUser } from '../../_lib/auth.js';
+import { getSql } from '../../_lib/db.js';
+import { parseBody, route } from '../../_lib/http.js';
 import {
   toPlaylist,
   toPublicSummary,
@@ -10,7 +10,7 @@ import {
   type PlaylistRow,
   type PlaylistSummaryRow,
   type PublicPlaylistSummaryRow,
-} from '../_lib/rows.js';
+} from '../../_lib/rows.js';
 
 /** Quantas públicas de outras contas a listagem retorna (as mais recentes). */
 const PUBLIC_LIMIT = 50;

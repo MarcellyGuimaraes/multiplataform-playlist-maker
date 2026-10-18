@@ -1,9 +1,9 @@
-import { loginSchema } from '../../shared/schemas.js';
-import type { AuthUser } from '../../shared/types.js';
-import { createSession } from '../_lib/auth.js';
-import { getSql } from '../_lib/db.js';
-import { parseBody, route, unauthorized } from '../_lib/http.js';
-import { verifyAgainstDummy, verifyPassword } from '../_lib/password.js';
+import { loginSchema } from '../../../shared/schemas.js';
+import type { AuthUser } from '../../../shared/types.js';
+import { createSession } from '../../_lib/auth.js';
+import { getSql } from '../../_lib/db.js';
+import { parseBody, route, unauthorized } from '../../_lib/http.js';
+import { verifyAgainstDummy, verifyPassword } from '../../_lib/password.js';
 
 const INVALID = 'E-mail ou senha inválidos.';
 

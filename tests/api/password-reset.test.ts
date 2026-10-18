@@ -3,11 +3,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { hashToken } from '../../api/_lib/auth.js';
 import { getSql } from '../../api/_lib/db.js';
 import { sendPasswordResetEmail } from '../../api/_lib/mailer.js';
-import login from '../../api/auth/login.js';
-import me from '../../api/auth/me.js';
-import requestReset from '../../api/auth/password-reset/index.js';
-import confirmReset from '../../api/auth/password-reset/confirm.js';
-import signup from '../../api/auth/signup.js';
+import login from '../../api/_routes/auth/login.js';
+import me from '../../api/_routes/auth/me.js';
+import requestReset from '../../api/_routes/auth/password-reset/index.js';
+import confirmReset from '../../api/_routes/auth/password-reset/confirm.js';
+import signup from '../../api/_routes/auth/signup.js';
 import { call, cookieFrom } from '../helpers.js';
 import { createTestDb } from '../pgdb.js';
 

@@ -1,8 +1,8 @@
-import { playlistNameSchema } from '../../../shared/schemas.js';
-import { requireUser } from '../../_lib/auth.js';
-import { getSql } from '../../_lib/db.js';
-import { isUuid, notFound, param, parseBody, route } from '../../_lib/http.js';
-import { toPlaylist, type PlaylistRow, type TrackRow } from '../../_lib/rows.js';
+import { playlistNameSchema } from '../../../../shared/schemas.js';
+import { requireUser } from '../../../_lib/auth.js';
+import { getSql } from '../../../_lib/db.js';
+import { isUuid, notFound, param, parseBody, route } from '../../../_lib/http.js';
+import { toPlaylist, type PlaylistRow, type TrackRow } from '../../../_lib/rows.js';
 
 const PLAYLIST_NOT_FOUND = 'Playlist não encontrada.';
 

@@ -1,8 +1,8 @@
-import { passwordResetConfirmSchema } from '../../../shared/schemas.js';
-import { hashToken } from '../../_lib/auth.js';
-import { getSql } from '../../_lib/db.js';
-import { badRequest, parseBody, route } from '../../_lib/http.js';
-import { hashPassword } from '../../_lib/password.js';
+import { passwordResetConfirmSchema } from '../../../../shared/schemas.js';
+import { hashToken } from '../../../_lib/auth.js';
+import { getSql } from '../../../_lib/db.js';
+import { badRequest, parseBody, route } from '../../../_lib/http.js';
+import { hashPassword } from '../../../_lib/password.js';
 
 const INVALID_LINK = 'Link inválido ou expirado. Peça um novo.';
 const RESET_TOKEN = /^[A-Za-z0-9_-]{43}$/;

@@ -1,8 +1,8 @@
-import { visibilitySchema } from '../../../shared/schemas.js';
-import { requireUser } from '../../_lib/auth.js';
-import { getSql } from '../../_lib/db.js';
-import { isUuid, newShareToken, notFound, param, parseBody, route } from '../../_lib/http.js';
-import { toPlaylist, type PlaylistRow } from '../../_lib/rows.js';
+import { visibilitySchema } from '../../../../shared/schemas.js';
+import { requireUser } from '../../../_lib/auth.js';
+import { getSql } from '../../../_lib/db.js';
+import { isUuid, newShareToken, notFound, param, parseBody, route } from '../../../_lib/http.js';
+import { toPlaylist, type PlaylistRow } from '../../../_lib/rows.js';
 
 /**
  * Alterna entre pública e privada numa única escrita. Privada → pública sempre gera token novo;

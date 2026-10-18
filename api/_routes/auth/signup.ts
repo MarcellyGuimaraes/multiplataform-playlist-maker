@@ -1,9 +1,9 @@
-import { signupSchema } from '../../shared/schemas.js';
-import type { AuthUser } from '../../shared/types.js';
-import { createSession } from '../_lib/auth.js';
-import { getSql } from '../_lib/db.js';
-import { conflict, parseBody, route } from '../_lib/http.js';
-import { hashPassword } from '../_lib/password.js';
+import { signupSchema } from '../../../shared/schemas.js';
+import type { AuthUser } from '../../../shared/types.js';
+import { createSession } from '../../_lib/auth.js';
+import { getSql } from '../../_lib/db.js';
+import { conflict, parseBody, route } from '../../_lib/http.js';
+import { hashPassword } from '../../_lib/password.js';
 
 /** Cria a conta e já inicia a sessão. E-mail repetido responde 409 (troca consciente, ver design). */
 export default route({

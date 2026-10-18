@@ -1,9 +1,9 @@
-import { parseTrackUrl } from '../../../../shared/parseTrackUrl.js';
-import { updateTrackSchema, YOUTUBE_ALT_ERROR } from '../../../../shared/schemas.js';
-import { requireUser } from '../../../_lib/auth.js';
-import { getSql } from '../../../_lib/db.js';
-import { badRequest, isUuid, notFound, param, parseBody, route } from '../../../_lib/http.js';
-import { toTrack, type TrackRow } from '../../../_lib/rows.js';
+import { parseTrackUrl } from '../../../../../shared/parseTrackUrl.js';
+import { updateTrackSchema, YOUTUBE_ALT_ERROR } from '../../../../../shared/schemas.js';
+import { requireUser } from '../../../../_lib/auth.js';
+import { getSql } from '../../../../_lib/db.js';
+import { badRequest, isUuid, notFound, param, parseBody, route } from '../../../../_lib/http.js';
+import { toTrack, type TrackRow } from '../../../../_lib/rows.js';
 
 const TRACK_NOT_FOUND = 'Faixa não encontrada.';
 const ONLY_SPOTIFY = 'Só faixas do Spotify aceitam versão no YouTube.';

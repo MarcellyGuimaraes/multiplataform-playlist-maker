@@ -1,5 +1,5 @@
 // Postgres real em memória (PGlite) com as migrações do projeto aplicadas, para testar o SQL dos handlers.
-import signup from '../api/auth/signup.js';
+import signup from '../api/_routes/auth/signup.js';
 import { openPglite } from '../scripts/pglite.js';
 import { call, cookieFrom } from './helpers.js';
 

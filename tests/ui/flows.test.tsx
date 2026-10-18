@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-// Fluxos de ponta a ponta da interface: páginas React reais, com o fetch do navegador roteado para os
-// handlers reais da API (mesmo roteamento por arquivos do servidor de desenvolvimento) sobre Postgres (PGlite).
+// Fluxos de ponta a ponta da interface: páginas React reais, com o fetch do navegador entregue à função
+// única da API (o mesmo despacho de rotas do deploy e do servidor de desenvolvimento) sobre Postgres (PGlite).
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSql } from '../../api/_lib/db.js';
-import { discoverRoutes, matchRoute } from '../../scripts/vite-dev-api.js';
+import api from '../../api/index.js';
 import { App } from '../../src/App';
 import { PlayerAdapterProvider } from '../../src/player/PlayerAdapterContext';
 import { createFakeFactories } from '../../src/player/testing';
@@ -14,8 +13,6 @@ import { createTestDb } from '../pgdb.js';
 
 vi.mock('../../api/_lib/db.js', () => ({ getSql: vi.fn() }));
 
-const ROOT = join(import.meta.dirname, '..', '..');
-const routes = discoverRoutes(ROOT);
 let testDb: Awaited<ReturnType<typeof createTestDb>>;
 const apiCalls: string[] = [];
 // Os SDKs oficiais de player não rodam em jsdom: os fluxos usam adaptadores falsos que registram as cargas.
@@ -30,14 +27,12 @@ async function fakeFetch(input: string | URL | Request, init?: RequestInit): Pro
     return Response.json({ title: `Título ${url.hostname}`, author_name: 'Autor', thumbnail_url: 'https://img.example/t.jpg' });
   }
   apiCalls.push(`${init?.method ?? 'GET'} ${url.pathname}`);
-  const match = matchRoute(routes, url.pathname);
-  if (!match) return Response.json({ error: { code: 'not_found', message: 'Rota não encontrada.' } }, { status: 404 });
-  const mod = await import(/* @vite-ignore */ join(ROOT, match.file));
   const res = fakeRes();
-  await mod.default(
+  // Como o rewrite do vercel.json: /api/<caminho> chega à função com ?path=<caminho>.
+  await api(
     fakeReq({
       method: init?.method ?? 'GET',
-      query: { ...Object.fromEntries(url.searchParams), ...match.params },
+      query: { ...Object.fromEntries(url.searchParams), path: url.pathname.replace(/^\/api\//, '') },
       body: init?.body ? JSON.parse(String(init.body)) : undefined,
       cookie: cookieJar || undefined,
     }),

@@ -1,7 +1,7 @@
-import { reorderSchema } from '../../../../shared/schemas.js';
-import { requireUser } from '../../../_lib/auth.js';
-import { getSql } from '../../../_lib/db.js';
-import { conflict, isUuid, notFound, param, parseBody, route } from '../../../_lib/http.js';
+import { reorderSchema } from '../../../../../shared/schemas.js';
+import { requireUser } from '../../../../_lib/auth.js';
+import { getSql } from '../../../../_lib/db.js';
+import { conflict, isUuid, notFound, param, parseBody, route } from '../../../../_lib/http.js';
 
 /**
  * Reordena as faixas. O corpo deve conter exatamente o conjunto atual de faixas da playlist;

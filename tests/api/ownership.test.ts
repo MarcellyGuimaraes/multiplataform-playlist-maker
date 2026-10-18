@@ -1,10 +1,10 @@
 // Posse das playlists com duas contas reais (Maria e Ana) sobre Postgres (PGlite).
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSql } from '../../api/_lib/db.js';
-import playlists from '../../api/playlists/index.js';
-import playlistById from '../../api/playlists/[id]/index.js';
-import addTrack from '../../api/playlists/[id]/tracks/index.js';
-import trackById from '../../api/playlists/[id]/tracks/[trackId].js';
+import playlists from '../../api/_routes/playlists/index.js';
+import playlistById from '../../api/_routes/playlists/[id]/index.js';
+import addTrack from '../../api/_routes/playlists/[id]/tracks/index.js';
+import trackById from '../../api/_routes/playlists/[id]/tracks/[trackId].js';
 import type { PlaylistDetail, Track } from '../../shared/types.js';
 import { call } from '../helpers.js';
 import { createTestDb, signupAs } from '../pgdb.js';

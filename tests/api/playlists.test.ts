@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSql } from '../../api/_lib/db.js';
-import playlists from '../../api/playlists/index.js';
-import playlistById from '../../api/playlists/[id]/index.js';
-import shareToken from '../../api/playlists/[id]/share-token.js';
+import playlists from '../../api/_routes/playlists/index.js';
+import playlistById from '../../api/_routes/playlists/[id]/index.js';
+import shareToken from '../../api/_routes/playlists/[id]/share-token.js';
 import { call, fakeSql, fakeSqlAs, MARIA, SESSION_COOKIE, type TestUser } from '../helpers.js';
 
 vi.mock('../../api/_lib/db.js', () => ({ getSql: vi.fn() }));

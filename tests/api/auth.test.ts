@@ -1,10 +1,10 @@
 // Rotas de conta (cadastro, login, logout, sessão atual) contra um Postgres real (PGlite).
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSql } from '../../api/_lib/db.js';
-import login from '../../api/auth/login.js';
-import logout from '../../api/auth/logout.js';
-import me from '../../api/auth/me.js';
-import signup from '../../api/auth/signup.js';
+import login from '../../api/_routes/auth/login.js';
+import logout from '../../api/_routes/auth/logout.js';
+import me from '../../api/_routes/auth/me.js';
+import signup from '../../api/_routes/auth/signup.js';
 import { call, cookieFrom, type FakeRes } from '../helpers.js';
 import { createTestDb } from '../pgdb.js';
 

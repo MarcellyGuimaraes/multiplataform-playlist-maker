@@ -1,11 +1,11 @@
-import { parseTrackUrl } from '../../../../shared/parseTrackUrl.js';
-import { addTrackSchema } from '../../../../shared/schemas.js';
-import { requireUser } from '../../../_lib/auth.js';
-import { getSql } from '../../../_lib/db.js';
-import { badRequest, isUuid, notFound, param, parseBody, route } from '../../../_lib/http.js';
-import { fetchMetadata } from '../../../_lib/oembed.js';
-import { resolveShortLink } from '../../../_lib/resolveShortLink.js';
-import { toTrack, type TrackRow } from '../../../_lib/rows.js';
+import { parseTrackUrl } from '../../../../../shared/parseTrackUrl.js';
+import { addTrackSchema } from '../../../../../shared/schemas.js';
+import { requireUser } from '../../../../_lib/auth.js';
+import { getSql } from '../../../../_lib/db.js';
+import { badRequest, isUuid, notFound, param, parseBody, route } from '../../../../_lib/http.js';
+import { fetchMetadata } from '../../../../_lib/oembed.js';
+import { resolveShortLink } from '../../../../_lib/resolveShortLink.js';
+import { toTrack, type TrackRow } from '../../../../_lib/rows.js';
 
 /** Adiciona uma faixa ao final da playlist a partir de um link colado. Só referências são gravadas. */
 export default route({

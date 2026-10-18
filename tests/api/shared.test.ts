@@ -1,14 +1,14 @@
 // Visualização pública por token e garantia de que o token não serve para escrita (PGlite real).
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSql } from '../../api/_lib/db.js';
-import playlists from '../../api/playlists/index.js';
-import playlistById from '../../api/playlists/[id]/index.js';
-import shareTokenRoute from '../../api/playlists/[id]/share-token.js';
-import addTrack from '../../api/playlists/[id]/tracks/index.js';
-import trackById from '../../api/playlists/[id]/tracks/[trackId].js';
-import reorder from '../../api/playlists/[id]/tracks/order.js';
-import visibilityRoute from '../../api/playlists/[id]/visibility.js';
-import shared from '../../api/shared/[token].js';
+import playlists from '../../api/_routes/playlists/index.js';
+import playlistById from '../../api/_routes/playlists/[id]/index.js';
+import shareTokenRoute from '../../api/_routes/playlists/[id]/share-token.js';
+import addTrack from '../../api/_routes/playlists/[id]/tracks/index.js';
+import trackById from '../../api/_routes/playlists/[id]/tracks/[trackId].js';
+import reorder from '../../api/_routes/playlists/[id]/tracks/order.js';
+import visibilityRoute from '../../api/_routes/playlists/[id]/visibility.js';
+import shared from '../../api/_routes/shared/[token].js';
 import type { PlaylistDetail, SharedPlaylist, Track } from '../../shared/types.js';
 import { call } from '../helpers.js';
 import { createTestDb, signupAs } from '../pgdb.js';

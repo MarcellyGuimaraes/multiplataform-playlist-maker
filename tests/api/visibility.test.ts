@@ -1,9 +1,9 @@
 // Visibilidade e ciclo de vida do token de compartilhamento contra um Postgres real (PGlite).
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSql } from '../../api/_lib/db.js';
-import playlists from '../../api/playlists/index.js';
-import shareTokenRoute from '../../api/playlists/[id]/share-token.js';
-import visibilityRoute from '../../api/playlists/[id]/visibility.js';
+import playlists from '../../api/_routes/playlists/index.js';
+import shareTokenRoute from '../../api/_routes/playlists/[id]/share-token.js';
+import visibilityRoute from '../../api/_routes/playlists/[id]/visibility.js';
 import type { PlaylistDetail, Visibility } from '../../shared/types.js';
 import { call } from '../helpers.js';
 import { createTestDb, signupAs } from '../pgdb.js';

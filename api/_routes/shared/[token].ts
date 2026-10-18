@@ -1,7 +1,7 @@
-import { getSql } from '../_lib/db.js';
-import { notFound, param, route } from '../_lib/http.js';
-import { toSharedTrack, type TrackRow } from '../_lib/rows.js';
-import type { SharedPlaylist } from '../../shared/types.js';
+import { getSql } from '../../_lib/db.js';
+import { notFound, param, route } from '../../_lib/http.js';
+import { toSharedTrack, type TrackRow } from '../../_lib/rows.js';
+import type { SharedPlaylist } from '../../../shared/types.js';
 
 const SHARE_TOKEN = /^[A-Za-z0-9_-]{22}$/;
 const NOT_FOUND = 'Playlist não encontrada.';
